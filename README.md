@@ -62,7 +62,8 @@ Pyldon takes the **security model** from NanoClaw (container isolation, per-room
 ## Requirements
 
 - Linux or macOS
-- Python 3.12+
+- Python 3.14+
+- [uv](https://docs.astral.sh/uv/) (package manager -- always use `uv` for dependency management and running)
 - [Claude Code](https://claude.ai/download)
 - [Docker](https://docker.com/products/docker-desktop)
 - A Matrix account with access token

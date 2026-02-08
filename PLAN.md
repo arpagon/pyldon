@@ -62,7 +62,7 @@ Local paths for reference:
 
 | NanoClaw Source | Pyldon Target | Effort | Notes |
 |-----------------|---------------|--------|-------|
-| `container/Dockerfile` | `container/Dockerfile` | Medium | `node:22-slim` --> `python:3.12-slim`; keep Chromium + agent-browser |
+| `container/Dockerfile` | `container/Dockerfile` | Medium | `node:22-slim` --> `python:3.14-slim`; keep Chromium + agent-browser |
 | `container/build.sh` | `container/build.sh` | Easy | Minimal changes |
 | `package.json` | `pyproject.toml` | Easy | [nanobot pyproject.toml](https://github.com/HKUDS/nanobot/blob/main/pyproject.toml) |
 | `tsconfig.json` | `pyproject.toml [tool.mypy]` | Easy | Optional |

@@ -33,7 +33,7 @@ Single Python process (asyncio) that connects to Matrix via `matrix-nio`, routes
 
 ## Tech Stack
 
-- **Python 3.12+** with asyncio
+- **Python 3.14+** with asyncio (always use `uv` for package management and running)
 - **matrix-nio[e2e]** for Matrix + E2EE
 - **claude-agent-sdk** (Python) for agent execution inside containers
 - **SQLite** via `aiosqlite` for persistence
@@ -44,9 +44,13 @@ Single Python process (asyncio) that connects to Matrix via `matrix-nio`, routes
 
 ## Development
 
+Always use `uv` for all Python operations. Never use `pip`, `pip3`, or raw `python` commands.
+
 ```bash
 uv run pyldon            # Run the app
 uv run pytest            # Run tests
+uv add <package>         # Add a dependency
+uv sync                  # Sync dependencies
 ./container/build.sh     # Rebuild agent container
 ```
 
