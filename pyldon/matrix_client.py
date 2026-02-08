@@ -17,6 +17,7 @@ from nio import (
     LoginResponse,
     RoomMessageText,
     RoomSendResponse,
+    WhoamiResponse,
 )
 
 from pyldon.config import DATA_DIR, STORE_DIR
@@ -57,8 +58,22 @@ def load_matrix_config() -> MatrixConfig:
     )
 
 
+def _save_matrix_config(cfg: MatrixConfig) -> None:
+    """Persist matrix config back to disk (after login updates tokens)."""
+    config_path = DATA_DIR / "matrix_config.json"
+    config_path.write_text(
+        json.dumps(cfg.model_dump(exclude_none=True), indent=2),
+        encoding="utf-8",
+    )
+
+
 async def init_matrix_client() -> AsyncClient:
-    """Initialize and return the Matrix client."""
+    """Initialize and return the Matrix client.
+
+    For E2EE to work, the client must login with password on first run
+    to generate Olm device keys. Subsequent runs reuse the stored
+    access_token, device_id, and crypto store.
+    """
     global _client, _config
 
     if _client is not None:
@@ -77,35 +92,70 @@ async def init_matrix_client() -> AsyncClient:
     _client = AsyncClient(
         homeserver=_config.homeserver,
         user=_config.user_id,
+        device_id=_config.device_id or "",
         store_path=str(store_dir),
         config=client_config,
     )
 
-    # Set the access token directly (no login needed)
-    _client.access_token = _config.access_token
-    _client.user_id = _config.user_id
-
-    # Load device_id from store if available, otherwise we'll get it from a whoami call
-    device_id_path = store_dir / "device_id"
-    if device_id_path.exists():
-        _client.device_id = device_id_path.read_text(encoding="utf-8").strip()
-    else:
-        # Get device_id via whoami
-        resp = await _client.whoami()
-        if hasattr(resp, "device_id") and resp.device_id:
+    if _config.encryption and _config.password and not _config.device_id:
+        # First run with E2EE: login with password to generate device keys
+        logger.info("E2EE first run: logging in with password to generate device keys")
+        resp = await _client.login(
+            password=_config.password,
+            device_name="PyldonBot",
+        )
+        if isinstance(resp, LoginResponse):
+            logger.info(
+                "Login successful: device_id={}, user_id={}",
+                resp.device_id,
+                resp.user_id,
+            )
+            # Update config with new credentials
+            _config.access_token = resp.access_token
+            _config.device_id = resp.device_id
+            _client.access_token = resp.access_token
             _client.device_id = resp.device_id
-            device_id_path.write_text(resp.device_id, encoding="utf-8")
+            # Persist updated config
+            _save_matrix_config(_config)
+        else:
+            logger.error("Login failed: {}", resp)
+            raise RuntimeError(f"Matrix login failed: {resp}")
+    elif _config.encryption and _config.device_id:
+        # Subsequent runs: use stored access_token + device_id, load crypto store
+        _client.access_token = _config.access_token
+        _client.user_id = _config.user_id
+        _client.device_id = _config.device_id
+        # Load the olm account and crypto keys from the store DB
+        _client.load_store()
+        logger.info(
+            "E2EE: using stored device_id={}, olm loaded", _config.device_id
+        )
+    else:
+        # No E2EE or no password: use access_token directly
+        _client.access_token = _config.access_token
+        _client.user_id = _config.user_id
 
-    # If E2EE is enabled, load or create olm account
+        # Try to get device_id if we don't have one
+        if not _config.device_id:
+            resp = await _client.whoami()
+            if isinstance(resp, WhoamiResponse):
+                device_id: str | None = resp.device_id
+                if device_id:
+                    _client.device_id = device_id
+
+    # If E2EE, trust all devices in rooms we're in (auto-trust for bot use)
     if _config.encryption:
-        crypto_dir = store_dir / "crypto"
-        crypto_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("E2EE crypto storage initialized at {}", crypto_dir)
+        logger.info(
+            "E2EE enabled: device_id={}, store_path={}",
+            _client.device_id,
+            store_dir,
+        )
 
     logger.info(
-        "Matrix client initialized: homeserver={}, user_id={}, encryption={}",
+        "Matrix client initialized: homeserver={}, user_id={}, device_id={}, encryption={}",
         _config.homeserver,
         _config.user_id,
+        _client.device_id,
         _config.encryption,
     )
 

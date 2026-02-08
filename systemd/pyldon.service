@@ -1,0 +1,20 @@
+[Unit]
+Description=Pyldon Matrix Bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/arpagon/Workspace/arpagon/pyldon
+ExecStart=/home/arpagon/.local/bin/uv run pyldon
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/arpagon/Workspace/arpagon/pyldon/.env
+
+# Logging (stdout/stderr go to journald)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pyldon
+
+[Install]
+WantedBy=default.target

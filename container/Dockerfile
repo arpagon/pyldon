@@ -44,7 +44,7 @@ WORKDIR /app
 COPY agent_runner/ ./agent_runner/
 
 # Create a minimal pyproject.toml for the container agent
-RUN printf '[project]\nname = "pyldon-agent"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = [\n    "claude-code-sdk>=0.1.0",\n    "croniter>=6.0.0",\n]\n\n[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"\n' > pyproject.toml
+RUN printf '[project]\nname = "pyldon-agent"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = [\n    "claude-code-sdk>=0.0.25",\n    "croniter>=6.0.0",\n]\n\n[tool.hatch.build.targets.wheel]\npackages = ["agent_runner"]\n\n[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"\n' > pyproject.toml
 
 # Install Python dependencies
 RUN uv sync
@@ -53,7 +53,7 @@ RUN uv sync
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks
 
 # Create entrypoint script
-RUN printf '#!/bin/bash\nset -e\n[ -f /workspace/env-dir/env ] && export $(cat /workspace/env-dir/env | xargs)\ncat > /tmp/input.json\nuv run python -m agent_runner.main < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN printf '#!/bin/bash\nset -e\n[ -f /workspace/env-dir/env ] && export $(cat /workspace/env-dir/env | xargs)\ncat > /tmp/input.json\ncd /app && uv run python -m agent_runner.main < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Create user with same UID/GID as host user for seamless file permissions
 ARG USER_UID=1001

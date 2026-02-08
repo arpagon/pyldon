@@ -9,14 +9,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from croniter import croniter
 from loguru import logger
+
+from nio import (
+    JoinedRoomsResponse,
+    RoomGetStateEventResponse,
+)
 
 from pyldon.config import (
     ASSISTANT_NAME,
@@ -152,13 +158,13 @@ async def _sync_room_metadata(force: bool = False) -> None:
         resp = await client.joined_rooms()
 
         count = 0
-        if hasattr(resp, "rooms"):
+        if isinstance(resp, JoinedRoomsResponse):
             for room_id in resp.rooms:
                 try:
                     # Try to get room name from state
                     state_resp = await client.room_get_state_event(room_id, "m.room.name")
                     name = None
-                    if hasattr(state_resp, "content"):
+                    if isinstance(state_resp, RoomGetStateEventResponse):
                         name = state_resp.content.get("name")
                     if name:
                         await update_chat_name(room_id, name)
@@ -209,6 +215,7 @@ async def _process_matrix_message(
     is_main: bool,
 ) -> None:
     """Process an incoming Matrix message."""
+    global _last_agent_timestamp
     # Handle pairing flow if not paired yet
     if not is_paired():
         pending = get_pending_pairing()
@@ -229,18 +236,13 @@ async def _process_matrix_message(
             )
         return
 
-    folder = (
-        room_config.folder
-        if room_config and room_config.folder
-        else (MAIN_GROUP_FOLDER if is_main else f"matrix-{message.room_id.replace(chr(c), '_') for c in range(256) if not chr(c).isalnum()}")
-    )
-    # Sanitize folder name properly
-    if not (room_config and room_config.folder):
-        if is_main:
-            folder = MAIN_GROUP_FOLDER
-        else:
-            import re
-            folder = f"matrix-{re.sub(r'[^a-zA-Z0-9]', '_', message.room_id)}"
+    # Determine folder for this room
+    if room_config and room_config.folder:
+        folder = room_config.folder
+    elif is_main:
+        folder = MAIN_GROUP_FOLDER
+    else:
+        folder = f"matrix-{re.sub(r'[^a-zA-Z0-9]', '_', message.room_id)}"
 
     # Build group object for container runner
     group = _registered_groups.get(message.room_id)
@@ -296,7 +298,6 @@ async def _process_matrix_message(
     await set_matrix_typing(message.room_id, False)
 
     if response:
-        global _last_agent_timestamp
         _last_agent_timestamp[message.room_id] = message.timestamp
         _save_state()
         await send_matrix_message(message.room_id, response, message.thread_id)
@@ -381,12 +382,16 @@ async def _process_task_ipc(
     action = data.get("type")
 
     if action == "schedule_task":
-        prompt = data.get("prompt")
-        schedule_type = data.get("schedule_type")
-        schedule_value = data.get("schedule_value")
-        group_folder = data.get("groupFolder")
+        prompt: str | None = data.get("prompt")
+        schedule_type: str | None = data.get("schedule_type")
+        schedule_value: str | None = data.get("schedule_value")
+        group_folder: str | None = data.get("groupFolder")
 
-        if not all([prompt, schedule_type, schedule_value, group_folder]):
+        if not prompt or not schedule_type or not schedule_value or not group_folder:
+            return
+
+        if schedule_type not in ("cron", "interval", "once"):
+            logger.warning("Invalid schedule_type: {}", schedule_type)
             return
 
         target_group = group_folder
@@ -490,11 +495,11 @@ async def _process_task_ipc(
         if not is_main:
             logger.warning("Unauthorized register_group attempt: source={}", source_group)
             return
-        jid = data.get("jid")
-        name = data.get("name")
-        folder = data.get("folder")
-        trigger = data.get("trigger")
-        if all([jid, name, folder, trigger]):
+        jid: str | None = data.get("jid")
+        name: str | None = data.get("name")
+        folder: str | None = data.get("folder")
+        trigger: str | None = data.get("trigger")
+        if jid and name and folder and trigger:
             _register_group(jid, RegisteredGroup(
                 name=name,
                 folder=folder,
@@ -614,6 +619,37 @@ async def _connect_matrix() -> None:
 
     # Start the sync loop
     logger.info("Starting Matrix sync: homeserver={}, user_id={}", config.homeserver, config.user_id)
+
+    # If E2EE, do a first sync to get device lists, then upload keys and trust devices
+    if config.encryption:
+        logger.info("E2EE: performing initial sync to get device lists...")
+        resp = await client.sync(timeout=30000, full_state=True)
+
+        # Upload device keys if needed
+        if client.should_upload_keys:
+            logger.info("E2EE: uploading device keys...")
+            await client.keys_upload()
+
+        # Query keys for all users we share rooms with
+        if client.should_query_keys:
+            logger.info("E2EE: querying device keys for room members...")
+            await client.keys_query()
+
+        # Auto-trust all devices of all users in our rooms (bot behavior)
+        logger.info("E2EE: auto-trusting all devices in joined rooms...")
+        for room_id, room in client.rooms.items():
+            for user_id in room.users:
+                devices = client.device_store.active_user_devices(user_id)
+                for device in devices:
+                    if client.olm and not client.olm.is_device_verified(device):
+                        logger.debug(
+                            "E2EE: trusting device {} of user {}",
+                            device.device_id,
+                            user_id,
+                        )
+                        client.verify_device(device)
+
+        logger.info("E2EE: device trust setup complete")
 
     # Sync room metadata on startup
     try:

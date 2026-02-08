@@ -135,7 +135,7 @@ Objective: Full host process running with Matrix and container orchestration.
 | Edge cases | Container timeouts, malformed output, concurrent messages, large outputs |
 | Data migration | Script to migrate NanoClaw SQLite data + sessions to Pyldon format |
 | Skills rewrite | Update `.claude/skills/` for Python codebase |
-| Systemd service | Replace launchd plist with systemd unit |
+| ~~Systemd service~~ | ~~Replace launchd plist with systemd unit~~ (done: `systemd/pyldon.service`) |
 
 **Deliverable**: Production-ready Pyldon replacing NanoClaw.
 

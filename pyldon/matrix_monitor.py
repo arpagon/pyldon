@@ -14,6 +14,7 @@ from loguru import logger
 from nio import (
     AsyncClient,
     InviteMemberEvent,
+    MegolmEvent,
     RoomMemberEvent,
     RoomMessageText,
 )
@@ -151,8 +152,19 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
         except Exception as e:
             logger.error("Failed to join room {}: {}", room.room_id, e)
 
-    # Register callbacks
-    client.add_event_callback(_on_room_message, RoomMessageText)
-    client.add_event_callback(_on_invite, InviteMemberEvent)
+    async def _on_megolm_event(room: Any, event: MegolmEvent) -> None:
+        """Handle undecryptable encrypted messages."""
+        logger.warning(
+            "Undecryptable message: room={}, sender={}, device_id={}, session_id={}",
+            room.room_id,
+            event.sender,
+            event.device_id,
+            event.session_id,
+        )
+
+    # Register callbacks  # type: ignore[arg-type]  # matrix-nio callback types are more specific than the base signature
+    client.add_event_callback(_on_room_message, RoomMessageText)  # type: ignore[arg-type]
+    client.add_event_callback(_on_invite, InviteMemberEvent)  # type: ignore[arg-type]
+    client.add_event_callback(_on_megolm_event, MegolmEvent)  # type: ignore[arg-type]
 
     logger.info("Matrix monitor started")

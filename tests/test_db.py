@@ -151,6 +151,7 @@ class TestTaskOperations:
 
         await update_task("task-1", status="paused")
         task = await get_task_by_id("task-1")
+        assert task is not None
         assert task.status == "paused"
 
     async def test_delete_task(self, db):

@@ -122,6 +122,15 @@ class MatrixConfig(BaseModel):
     homeserver: str
     user_id: str
     access_token: str
+    password: str | None = None
+    """Password for login-based auth (needed for E2EE device key generation)."""
+
+    device_id: str | None = None
+    """Device ID for this bot instance."""
+
+    recovery_key: str | None = None
+    """E2EE recovery key for cross-signing / key backup."""
+
     encryption: bool = False
     """Enable end-to-end encryption (requires additional setup)."""
 
@@ -167,12 +176,14 @@ class MatrixMessage(BaseModel):
 class ContainerInput(BaseModel):
     """Input sent to the agent container via stdin."""
 
+    model_config = {"populate_by_name": True}
+
     prompt: str
-    session_id: str | None = None
-    group_folder: str
-    chat_jid: str
-    is_main: bool
-    is_scheduled_task: bool = False
+    session_id: str | None = Field(default=None, serialization_alias="sessionId")
+    group_folder: str = Field(serialization_alias="groupFolder")
+    chat_jid: str = Field(serialization_alias="chatJid")
+    is_main: bool = Field(serialization_alias="isMain")
+    is_scheduled_task: bool = Field(default=False, serialization_alias="isScheduledTask")
 
 
 class ContainerOutput(BaseModel):

@@ -156,6 +156,14 @@ def _build_docker_args(mounts: list[VolumeMount]) -> list[str]:
     """Build docker run arguments from mounts."""
     args = ["run", "-i", "--rm"]
 
+    # Load environment variables from env file and pass via -e
+    env_file = DATA_DIR / "env" / "env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").strip().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                args.extend(["-e", line])
+
     for mount in mounts:
         if mount.readonly:
             args.extend(["-v", f"{mount.host_path}:{mount.container_path}:ro"])
@@ -217,7 +225,7 @@ async def run_container_agent(
         )
 
     # Send input via stdin
-    input_json = input_data.model_dump_json()
+    input_json = input_data.model_dump_json(by_alias=True)
 
     try:
         stdout_bytes, stderr_bytes = await asyncio.wait_for(

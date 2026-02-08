@@ -115,7 +115,7 @@ def format_transcript_markdown(messages: list[dict], title: str | None = None) -
 
 async def main() -> None:
     """Main agent runner entry point."""
-    from claude_code_sdk import query, ClaudeCodeOptions, Permission
+    from claude_code_sdk import query, ClaudeCodeOptions
 
     from agent_runner.ipc_mcp import create_ipc_mcp
 
@@ -174,7 +174,7 @@ async def main() -> None:
                 "WebSearch", "WebFetch",
                 "mcp__pyldon__*",
             ],
-            permission_mode=Permission.BYPASS,
+            permission_mode="bypassPermissions",
         )
 
         if session_id:
