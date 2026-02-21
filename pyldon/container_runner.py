@@ -337,9 +337,39 @@ async def run_container_agent(
 
         output = ContainerOutput(**json.loads(json_line))
 
+        # Extract extra fields for logging (tool_calls, stderr from pi)
+        try:
+            raw_output = json.loads(json_line)
+            agent_tool_calls = raw_output.get("tool_calls", [])
+            agent_stderr = raw_output.get("stderr", "")
+        except Exception:
+            agent_tool_calls = []
+            agent_stderr = ""
+
+        # Append tool calls and stderr to log
+        if agent_tool_calls:
+            extra_lines = ["", "=== Tool Calls ==="]
+            for tc in agent_tool_calls:
+                extra_lines.append(f"- [{tc.get('status', '?')}] {tc.get('tool', '?')}")
+                args = tc.get("args", {})
+                if args:
+                    args_str = json.dumps(args) if isinstance(args, dict) else str(args)
+                    extra_lines.append(f"  args: {args_str[:200]}")
+                preview = tc.get("result_preview", "")
+                if preview:
+                    extra_lines.append(f"  result: {preview[:300]}")
+            log_file = logs_dir / f"container-{timestamp_str}.log"
+            existing = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+            log_file.write_text(existing + "\n".join(extra_lines) + "\n", encoding="utf-8")
+
+        if agent_stderr:
+            log_file = logs_dir / f"container-{timestamp_str}.log"
+            existing = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+            log_file.write_text(existing + "\n=== Pi Stderr ===\n" + agent_stderr + "\n", encoding="utf-8")
+
         logger.info(
-            "Container completed: group={}, duration={}ms, status={}, has_result={}",
-            group.name, duration_ms, output.status, bool(output.result),
+            "Container completed: group={}, duration={}ms, status={}, has_result={}, tools={}",
+            group.name, duration_ms, output.status, bool(output.result), len(agent_tool_calls),
         )
         return output
 

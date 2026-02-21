@@ -77,6 +77,7 @@ class TestMessageOperations:
         assert messages[0].content == "Hello world"
 
     async def test_filters_bot_messages(self, db):
+        """get_messages_since now includes bot messages for conversation context."""
         await store_message(
             id="msg1",
             chat_id="!room:test",
@@ -97,8 +98,10 @@ class TestMessageOperations:
         )
 
         messages = await get_messages_since("!room:test", "2026-01-01T00:00:00Z", "Andy")
-        assert len(messages) == 1
-        assert messages[0].content == "Hello"
+        assert len(messages) == 2
+        assert messages[0].sender_name == "Bot"
+        assert messages[1].sender_name == "User"
+        assert messages[1].content == "Hello"
 
 
 class TestTaskOperations:

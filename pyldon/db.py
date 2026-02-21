@@ -225,16 +225,16 @@ async def store_message(
 async def get_messages_since(
     chat_jid: str, since_timestamp: str, bot_prefix: str
 ) -> list[NewMessage]:
-    """Get messages since a timestamp, filtering out bot's own messages."""
+    """Get messages since a timestamp, including bot responses for context."""
     db = _get_db()
     cursor = await db.execute(
         """
         SELECT id, chat_jid, sender, sender_name, content, timestamp
         FROM messages
-        WHERE chat_jid = ? AND timestamp > ? AND content NOT LIKE ?
+        WHERE chat_jid = ? AND timestamp > ?
         ORDER BY timestamp
         """,
-        (chat_jid, since_timestamp, f"{bot_prefix}:%"),
+        (chat_jid, since_timestamp),
     )
     rows = await cursor.fetchall()
     return [
@@ -247,6 +247,35 @@ async def get_messages_since(
             timestamp=r["timestamp"],
         )
         for r in rows
+    ]
+
+
+async def get_recent_messages(
+    chat_jid: str, limit: int = 20
+) -> list[NewMessage]:
+    """Get the most recent messages for conversation context."""
+    db = _get_db()
+    cursor = await db.execute(
+        """
+        SELECT id, chat_jid, sender, sender_name, content, timestamp
+        FROM messages
+        WHERE chat_jid = ?
+        ORDER BY timestamp DESC
+        LIMIT ?
+        """,
+        (chat_jid, limit),
+    )
+    rows = await cursor.fetchall()
+    return [
+        NewMessage(
+            id=r["id"],
+            chat_jid=r["chat_jid"],
+            sender=r["sender"],
+            sender_name=r["sender_name"] or r["sender"],
+            content=r["content"],
+            timestamp=r["timestamp"],
+        )
+        for r in reversed(rows)  # Return in chronological order
     ]
 
 

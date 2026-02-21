@@ -47,6 +47,7 @@ from pyldon.db import (
     get_all_tasks,
     get_last_group_sync,
     get_messages_since,
+    get_recent_messages,
     get_task_by_id,
     init_database,
     set_last_group_sync,
@@ -269,9 +270,24 @@ async def _process_matrix_message(
     # Store chat metadata
     await store_chat_metadata(message.room_id, message.timestamp, message.sender_name)
 
-    # Get all messages since last agent interaction for full context
+    # Get recent conversation for context (last 20 messages)
+    # Plus any new messages since last agent interaction
     since_timestamp = _last_agent_timestamp.get(message.room_id, "")
-    missed_messages = await get_messages_since(message.room_id, since_timestamp, ASSISTANT_NAME)
+    recent_messages = await get_recent_messages(message.room_id, limit=50)
+    new_messages = await get_messages_since(message.room_id, since_timestamp, ASSISTANT_NAME)
+
+    # Merge: use recent for context, ensure new messages are included
+    seen_ids = set()
+    all_messages = []
+    for m in recent_messages:
+        if m.id not in seen_ids:
+            seen_ids.add(m.id)
+            all_messages.append(m)
+    for m in new_messages:
+        if m.id not in seen_ids:
+            seen_ids.add(m.id)
+            all_messages.append(m)
+    all_messages.sort(key=lambda m: m.timestamp)
 
     # Build XML-formatted prompt
     def _escape_xml(s: str) -> str:
@@ -284,14 +300,15 @@ async def _process_matrix_message(
 
     lines = [
         f'<message sender="{_escape_xml(m.sender_name)}" time="{m.timestamp}">{_escape_xml(m.content)}</message>'
-        for m in missed_messages
+        for m in all_messages
     ]
     prompt = f"<messages>\n{chr(10).join(lines)}\n</messages>"
 
     if not prompt.strip():
         return
 
-    logger.info("Processing message: group={}, message_count={}", group.name, len(missed_messages))
+    logger.info("Processing message: group={}, message_count={} (recent={}, new={})",
+                group.name, len(all_messages), len(recent_messages), len(new_messages))
 
     await set_matrix_typing(message.room_id, True)
     response = await _run_agent(group, prompt, message.room_id)

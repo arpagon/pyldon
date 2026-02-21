@@ -71,7 +71,7 @@ async def run(input_data: dict) -> dict:
     env["PYLDON_CHAT_JID"] = chat_jid
     env["PYLDON_IS_MAIN"] = "true" if is_main else "false"
 
-    log(f"Spawning pi: provider={PI_PROVIDER}, group={group_folder}")
+    log(f"Spawning pi: provider={PI_PROVIDER}, model={PI_MODEL or 'default'}, group={group_folder}")
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -87,9 +87,11 @@ async def run(input_data: dict) -> dict:
             "status": "error",
             "result": None,
             "error": f"pi binary not found at {PI_BINARY}",
+            "tool_calls": [],
         }
 
     result_text = ""
+    tool_calls: list[dict] = []
     error: str | None = None
 
     try:
@@ -113,6 +115,28 @@ async def run(input_data: dict) -> dict:
                 ame = event.get("assistantMessageEvent", {})
                 if ame.get("type") == "text_delta":
                     result_text += ame.get("delta", "")
+
+            elif etype == "tool_execution_start":
+                tool_calls.append({
+                    "id": event.get("toolCallId", ""),
+                    "tool": event.get("toolName", ""),
+                    "args": event.get("args", {}),
+                    "status": "running",
+                })
+                log(f"Tool call: {event.get('toolName', '?')}")
+
+            elif etype == "tool_execution_end":
+                tid = event.get("toolCallId", "")
+                for tc in tool_calls:
+                    if tc["id"] == tid:
+                        tc["status"] = "error" if event.get("isError") else "done"
+                        # Extract result text from content array
+                        result_parts = []
+                        for part in (event.get("result") or {}).get("content", []):
+                            if part.get("type") == "text":
+                                result_parts.append(part["text"])
+                        tc["result_preview"] = "".join(result_parts)[:500]
+                        break
 
             elif etype == "response" and event.get("command") == "prompt":
                 if not event.get("success"):
@@ -139,16 +163,18 @@ async def run(input_data: dict) -> dict:
                 await proc.wait()
 
     # Log stderr tail
+    stderr_text = ""
     if proc.stderr:
-        stderr = await proc.stderr.read()
-        for ln in stderr.decode(errors="replace").strip().splitlines()[-10:]:
+        stderr_bytes = await proc.stderr.read()
+        stderr_text = stderr_bytes.decode(errors="replace").strip()
+        for ln in stderr_text.splitlines()[-10:]:
             log(f"[pi] {ln}")
 
     if error:
-        return {"status": "error", "result": None, "error": error}
+        return {"status": "error", "result": None, "error": error, "tool_calls": tool_calls, "stderr": stderr_text}
 
-    log(f"Done, result length={len(result_text)}")
-    return {"status": "success", "result": result_text or None, "error": None}
+    log(f"Done, result length={len(result_text)}, tool_calls={len(tool_calls)}")
+    return {"status": "success", "result": result_text or None, "error": None, "tool_calls": tool_calls, "stderr": stderr_text}
 
 
 async def main() -> None:
