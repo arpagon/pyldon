@@ -1,7 +1,7 @@
 [project]
 name = "pyldon"
 version = "0.1.0"
-description = "Personal Claude assistant with container-isolated agents via Matrix"
+description = "Personal assistant with container-isolated agents via Matrix"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -34,3 +34,9 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.uv]
+# python-olm doesn't build on Python 3.14 (cmake compat issue).
+# Use system package instead: pacman -S python-olm libolm
+# This override removes it from resolution; --system-site-packages makes it available.
+override-dependencies = ["python-olm ; sys_platform == 'never'"]

@@ -302,6 +302,17 @@ async def _process_matrix_message(
         _save_state()
         await send_matrix_message(message.room_id, response, message.thread_id)
 
+        # Store bot response in DB for conversation context
+        await store_message(
+            id=f"bot-{message.event_id}",
+            chat_id=message.room_id,
+            sender="bot",
+            sender_name=ASSISTANT_NAME,
+            content=response,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            is_from_me=True,
+        )
+
 
 async def _run_agent(
     group: RegisteredGroup, prompt: str, chat_id: str
@@ -371,6 +382,17 @@ async def _send_message(room_id: str, text: str) -> None:
     try:
         await send_matrix_message(room_id, text)
         logger.info("Message sent: room={}, length={}", room_id, len(text))
+
+        # Store bot message in DB for conversation context
+        await store_message(
+            id=f"bot-ipc-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+            chat_id=room_id,
+            sender="bot",
+            sender_name=ASSISTANT_NAME,
+            content=text,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            is_from_me=True,
+        )
     except Exception as e:
         logger.error("Failed to send message: room={}, error={}", room_id, e)
 

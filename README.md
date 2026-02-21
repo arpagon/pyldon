@@ -24,7 +24,7 @@ Pyldon is NanoClaw's architecture rewritten in Python. Same security model (OS-l
 
 - **Matrix I/O** - Message your assistant from any Matrix client (Element, FluffyChat, etc.)
 - **E2EE** - End-to-end encryption support
-- **Per-room isolation** - Each room gets its own filesystem, memory (`CLAUDE.md`), and container sandbox
+- **Per-room isolation** - Each room gets its own filesystem, memory (`AGENTS.md`), and container sandbox
 - **Main channel** - Admin room for cross-room management
 - **Scheduled tasks** - Cron, interval, and one-shot tasks that run as full containerized agents
 - **Web access** - Search and fetch content

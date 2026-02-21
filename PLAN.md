@@ -136,6 +136,8 @@ Objective: Full host process running with Matrix and container orchestration.
 | Data migration | Script to migrate NanoClaw SQLite data + sessions to Pyldon format |
 | Skills rewrite | Update `.claude/skills/` for Python codebase |
 | ~~Systemd service~~ | ~~Replace launchd plist with systemd unit~~ (done: `systemd/pyldon.service`) |
+| ~~Engine abstraction~~ | ~~Multi-provider support via engine pattern~~ (done: `docs/adr/adr-001-engine-abstraction.md`) |
+| ~~pi.dev integration~~ | ~~Pi engine via RPC mode + extension~~ (done: `container/agent_runner/engines/pi_engine.py`) |
 
 **Deliverable**: Production-ready Pyldon replacing NanoClaw.
 

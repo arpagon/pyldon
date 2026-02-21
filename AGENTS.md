@@ -1,10 +1,10 @@
 # Pyldon
 
-Python rewrite of [NanoClaw](https://github.com/arpagon/nanoclaw). Personal Claude assistant with container-isolated agents.
+Python rewrite of [NanoClaw](https://github.com/arpagon/nanoclaw). Personal assistant with container-isolated agents.
 
 ## Quick Context
 
-Single Python process (asyncio) that connects to Matrix via `matrix-nio`, routes messages to Claude Agent SDK running in Docker containers. Each room has isolated filesystem and memory.
+Single Python process (asyncio) that connects to Matrix via `matrix-nio`, routes messages to pi.dev agents running in Docker containers. Each room has isolated filesystem and memory.
 
 ## Key Modules
 
@@ -20,22 +20,23 @@ Single Python process (asyncio) that connects to Matrix via `matrix-nio`, routes
 | `pyldon/mount_security.py` | Validates additional mounts against external allowlist |
 | `pyldon/pairing.py` | Owner pairing system for Matrix setup |
 | `pyldon/models.py` | Pydantic models for all data types |
-| `container/agent_runner/main.py` | Runs inside Docker -- Claude Agent SDK + IPC MCP server |
-| `container/agent_runner/ipc_mcp.py` | MCP tools: schedule_task, send_message, etc. |
-| `groups/{name}/CLAUDE.md` | Per-room memory (isolated) |
+| `container/agent_runner/main.py` | Runs inside Docker — spawns pi via RPC, collects response |
+| `container/pi-extensions/pyldon-ipc.ts` | pi extension: IPC tools (send_message, schedule_task, etc.) |
+| `groups/{name}/AGENTS.md` | Per-room memory (isolated) |
 
 ## Reference Projects
 
 | Project | Path | Role |
 |---------|------|------|
 | NanoClaw (TypeScript) | `../nanoclaw/` | Direct ancestor -- same architecture, being rewritten |
+| pi-mono (source) | `../../thirdparty/badlogic/pi-mono/` | pi.dev source code — SDK, RPC, extensions, providers |
 | Nanobot (Python) | `../../thirdparty/HKUDS/nanobot/` | Python reference for patterns and idioms |
 
 ## Tech Stack
 
 - **Python 3.14+** with asyncio (always use `uv` for package management and running)
 - **matrix-nio[e2e]** for Matrix + E2EE
-- **claude-agent-sdk** (Python) for agent execution inside containers
+- **pi.dev** (`@mariozechner/pi-coding-agent`) for agent execution inside containers via RPC mode
 - **SQLite** via `aiosqlite` for persistence
 - **Pydantic** for data models and validation
 - **loguru** for logging

@@ -1,23 +1,15 @@
 #!/bin/bash
 # Build the Pyldon agent container image
-
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 IMAGE_NAME="pyldon-agent"
 TAG="${1:-latest}"
 
-echo "Building Pyldon agent container image..."
-echo "Image: ${IMAGE_NAME}:${TAG}"
-
-# Build with Docker
+echo "Building ${IMAGE_NAME}:${TAG}..."
 docker build -t "${IMAGE_NAME}:${TAG}" .
 
 echo ""
-echo "Build complete!"
-echo "Image: ${IMAGE_NAME}:${TAG}"
-echo ""
-echo "Test with:"
-echo "  echo '{\"prompt\":\"What is 2+2?\",\"groupFolder\":\"test\",\"chatJid\":\"test@test\",\"isMain\":false}' | docker run -i --rm ${IMAGE_NAME}:${TAG}"
+echo "Done: ${IMAGE_NAME}:${TAG}"
+echo "Test:"
+echo "  echo '{\"prompt\":\"What is 2+2?\",\"groupFolder\":\"test\",\"chatJid\":\"test\",\"isMain\":false}' | docker run -i --rm -e ANTHROPIC_API_KEY=\$ANTHROPIC_API_KEY ${IMAGE_NAME}:${TAG}"

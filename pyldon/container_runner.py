@@ -88,12 +88,12 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
             readonly=True,
         ))
 
-    # Per-group Claude sessions directory (isolated from other groups)
-    group_sessions_dir = DATA_DIR / "sessions" / group.folder / ".claude"
+    # Per-group sessions directory (isolated from other groups)
+    group_sessions_dir = DATA_DIR / "sessions" / group.folder / ".pi"
     group_sessions_dir.mkdir(parents=True, exist_ok=True)
     mounts.append(VolumeMount(
         str(group_sessions_dir),
-        "/home/pyldon/.claude",
+        "/home/pyldon/.pi",
         readonly=False,
     ))
 
@@ -114,13 +114,20 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
     if env_file.exists():
         env_content = env_file.read_text(encoding="utf-8")
         allowed_vars = [
-            "CLAUDE_CODE_OAUTH_TOKEN",
-            "ANTHROPIC_API_KEY",
-            "CLAUDE_CODE_USE_BEDROCK",
+            # pi.dev / Bedrock
             "AWS_BEARER_TOKEN_BEDROCK",
             "AWS_REGION",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "MISTRAL_API_KEY",
+            # pi config
+            "PYLDON_PI_PROVIDER",
+            "PYLDON_PI_MODEL",
         ]
         filtered_lines = [
             line

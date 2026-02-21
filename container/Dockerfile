@@ -1,9 +1,9 @@
 # Pyldon Agent Container
-# Runs Claude Agent SDK in isolated container with browser automation
+# Runs pi.dev agent in isolated container with browser automation
 
 FROM python:3.12-slim
 
-# Install system dependencies for Chromium
+# System dependencies for Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -27,46 +27,35 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install agent-browser and claude-code globally (Node.js tools)
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+# pi.dev agent (CLI + SDK + coding tools)
+RUN npm install -g @mariozechner/pi-coding-agent
 
-# Install uv for Python package management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Create app directory
 WORKDIR /app
 
-# Copy agent runner code
+# Python runner (reads stdin JSON, spawns pi RPC, writes stdout JSON)
 COPY agent_runner/ ./agent_runner/
 
-# Create a minimal pyproject.toml for the container agent
-RUN printf '[project]\nname = "pyldon-agent"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = [\n    "claude-code-sdk>=0.0.25",\n    "croniter>=6.0.0",\n]\n\n[tool.hatch.build.targets.wheel]\npackages = ["agent_runner"]\n\n[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"\n' > pyproject.toml
+# pi extension with IPC tools (send_message, schedule_task, etc.)
+COPY pi-extensions/ ./pi-extensions/
 
-# Install Python dependencies
-RUN uv sync
-
-# Create workspace directories
+# Workspace dirs
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks
 
-# Create entrypoint script
-RUN printf '#!/bin/bash\nset -e\n[ -f /workspace/env-dir/env ] && export $(cat /workspace/env-dir/env | xargs)\ncat > /tmp/input.json\ncd /app && uv run python -m agent_runner.main < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# Entrypoint: load env, pipe stdin to runner
+RUN printf '#!/bin/bash\nset -e\n[ -f /workspace/env-dir/env ] && export $(cat /workspace/env-dir/env | xargs)\ncat > /tmp/input.json\ncd /app && python3 -m agent_runner.main < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
-# Create user with same UID/GID as host user for seamless file permissions
+# Non-root user
 ARG USER_UID=1001
 ARG USER_GID=1001
 RUN groupadd --gid $USER_GID pyldon || true && \
     useradd --uid $USER_UID --gid $USER_GID -m pyldon || true && \
     chown -R $USER_UID:$USER_GID /workspace /app
+RUN mkdir -p /home/pyldon/.pi/agent && \
+    chown -R $USER_UID:$USER_GID /home/pyldon/.pi
 
-# Switch to non-root user
 USER pyldon
-
-# Set working directory to group workspace
 WORKDIR /workspace/group
-
-# Entry point reads JSON from stdin, outputs JSON to stdout
 ENTRYPOINT ["/app/entrypoint.sh"]
