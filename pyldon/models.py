@@ -168,6 +168,8 @@ class MatrixMessage(BaseModel):
     timestamp: str
     thread_id: str | None = None
     reply_to_id: str | None = None
+    images: list[dict[str, str]] = Field(default_factory=list)
+    """List of images: [{"data": "base64...", "mimeType": "image/png"}]"""
 
 
 # --- Container I/O Models ---
@@ -184,6 +186,8 @@ class ContainerInput(BaseModel):
     chat_jid: str = Field(serialization_alias="chatJid")
     is_main: bool = Field(serialization_alias="isMain")
     is_scheduled_task: bool = Field(default=False, serialization_alias="isScheduledTask")
+    images: list[dict[str, str]] = Field(default_factory=list, serialization_alias="images")
+    """Images as [{"data": "base64...", "mimeType": "image/png"}]"""
 
 
 class ContainerOutput(BaseModel):

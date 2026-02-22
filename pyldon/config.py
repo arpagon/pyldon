@@ -46,3 +46,7 @@ TIMEZONE: str = os.environ.get("TZ", "UTC")
 
 # Room metadata sync interval (24 hours)
 ROOM_SYNC_INTERVAL_MS: int = 24 * 60 * 60 * 1000
+
+# Speech-to-text (STT) settings
+STT_ENABLED: bool = os.environ.get("PYLDON_STT_ENABLED", "false").lower() in ("true", "1", "yes")
+STT_DOCKER_IMAGE: str = os.environ.get("PYLDON_STT_IMAGE", "pyldon-stt:latest")

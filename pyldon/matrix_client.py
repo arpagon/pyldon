@@ -180,12 +180,20 @@ def get_matrix_config() -> MatrixConfig:
 async def send_matrix_message(
     room_id: str, text: str, thread_id: str | None = None
 ) -> str:
-    """Send a text message to a Matrix room. Returns the event ID."""
+    """Send a text message to a Matrix room with markdown rendering. Returns the event ID."""
     client = get_matrix_client()
+
+    # Convert markdown to HTML for rich rendering in Matrix clients
+    from markdown_it import MarkdownIt
+
+    md = MarkdownIt().enable("strikethrough").enable("table")
+    html = md.render(text).strip()
 
     content: dict[str, Any] = {
         "msgtype": "m.text",
         "body": text,
+        "format": "org.matrix.custom.html",
+        "formatted_body": html,
     }
 
     # Thread support

@@ -42,6 +42,7 @@ async def run(input_data: dict) -> dict:
     chat_jid = input_data["chatJid"]
     is_main = input_data.get("isMain", False)
     is_scheduled_task = input_data.get("isScheduledTask", False)
+    images = input_data.get("images", [])
 
     # Prepend identity
     identity_path = Path("/workspace/group/IDENTITY.md")
@@ -96,7 +97,14 @@ async def run(input_data: dict) -> dict:
 
     try:
         assert proc.stdin is not None and proc.stdout is not None
-        proc.stdin.write((json.dumps({"type": "prompt", "message": prompt}) + "\n").encode())
+        rpc_msg: dict = {"type": "prompt", "message": prompt}
+        if images:
+            rpc_msg["images"] = [
+                {"type": "image", "data": img["data"], "mimeType": img["mimeType"]}
+                for img in images
+            ]
+            log(f"Sending prompt with {len(images)} image(s)")
+        proc.stdin.write((json.dumps(rpc_msg) + "\n").encode())
         await proc.stdin.drain()
 
         while True:

@@ -35,3 +35,10 @@ groups/
 
 # uv
 uv.lock
+
+# Rust build artifacts
+container/stt/parakeet-cli/target/
+
+# STT binary and models (too large for git)
+data/stt/
+data/models/

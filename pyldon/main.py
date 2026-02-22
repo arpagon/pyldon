@@ -311,7 +311,7 @@ async def _process_matrix_message(
                 group.name, len(all_messages), len(recent_messages), len(new_messages))
 
     await set_matrix_typing(message.room_id, True)
-    response = await _run_agent(group, prompt, message.room_id)
+    response = await _run_agent(group, prompt, message.room_id, images=message.images)
     await set_matrix_typing(message.room_id, False)
 
     if response:
@@ -332,7 +332,8 @@ async def _process_matrix_message(
 
 
 async def _run_agent(
-    group: RegisteredGroup, prompt: str, chat_id: str
+    group: RegisteredGroup, prompt: str, chat_id: str,
+    images: list[dict[str, str]] | None = None,
 ) -> str | None:
     """Run the agent in a container and return the response."""
     is_main = is_main_room(chat_id)
@@ -374,6 +375,7 @@ async def _run_agent(
                 group_folder=group.folder,
                 chat_jid=chat_id,
                 is_main=is_main,
+                images=images or [],
             ),
         )
 
