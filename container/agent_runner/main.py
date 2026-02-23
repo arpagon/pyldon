@@ -10,6 +10,7 @@ pi extension at /app/pi-extensions/pyldon-ipc.ts.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -82,7 +83,7 @@ async def run(input_data: dict) -> dict:
             stderr=asyncio.subprocess.PIPE,
             env=env,
             cwd="/workspace/group",
-            limit=10 * 1024 * 1024,  # 10MB line buffer for large image payloads
+            limit=1024 * 1024,  # 1MB line buffer (pi RPC responses can be large)
         )
     except FileNotFoundError:
         return {
@@ -100,11 +101,21 @@ async def run(input_data: dict) -> dict:
         assert proc.stdin is not None and proc.stdout is not None
         rpc_msg: dict = {"type": "prompt", "message": prompt}
         if images:
-            rpc_msg["images"] = [
-                {"type": "image", "data": img["data"], "mimeType": img["mimeType"]}
-                for img in images
-            ]
-            log(f"Sending prompt with {len(images)} image(s)")
+            loaded_images = []
+            for img in images:
+                # Images are passed as filesystem paths — read and base64-encode
+                img_path = img.get("containerPath") or img.get("path", "")
+                mime = img.get("mimeType", "image/jpeg")
+                try:
+                    with open(img_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("ascii")
+                    loaded_images.append({"type": "image", "data": b64, "mimeType": mime})
+                    log(f"Loaded image: {img_path} ({len(b64)//1024}KB base64)")
+                except Exception as e:
+                    log(f"Failed to load image {img_path}: {e}")
+            if loaded_images:
+                rpc_msg["images"] = loaded_images
+            log(f"Sending prompt with {len(loaded_images)} image(s)")
         proc.stdin.write((json.dumps(rpc_msg) + "\n").encode())
         await proc.stdin.drain()
 

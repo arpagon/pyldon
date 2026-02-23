@@ -311,7 +311,7 @@ async def _process_matrix_message(
                 group.name, len(all_messages), len(recent_messages), len(new_messages))
 
     await set_matrix_typing(message.room_id, True)
-    logger.debug("Passing images to agent: count={}, sizes={}", len(message.images), [len(img.get("data", "")) for img in message.images])
+    logger.debug("Passing images to agent: count={}", len(message.images))
     response = await _run_agent(group, prompt, message.room_id, images=message.images)
     await set_matrix_typing(message.room_id, False)
 

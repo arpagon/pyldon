@@ -169,7 +169,7 @@ class MatrixMessage(BaseModel):
     thread_id: str | None = None
     reply_to_id: str | None = None
     images: list[dict[str, str]] = Field(default_factory=list)
-    """List of images: [{"data": "base64...", "mimeType": "image/png"}]"""
+    """List of images: [{"path": "/abs/path.jpg", "mimeType": "image/jpeg"}]"""
 
 
 # --- Container I/O Models ---
@@ -187,7 +187,7 @@ class ContainerInput(BaseModel):
     is_main: bool = Field(serialization_alias="isMain")
     is_scheduled_task: bool = Field(default=False, serialization_alias="isScheduledTask")
     images: list[dict[str, str]] = Field(default_factory=list, serialization_alias="images")
-    """Images as [{"data": "base64...", "mimeType": "image/png"}]"""
+    """Images as [{"path": "/container/path.jpg", "mimeType": "image/jpeg"}]"""
 
 
 class ContainerOutput(BaseModel):

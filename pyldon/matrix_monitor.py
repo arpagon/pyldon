@@ -297,8 +297,7 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             logger.error("Error handling transcribed audio: room={}, error={}", room_id, e)
 
     async def _on_image_message(room: Any, event: RoomMessageImage) -> None:
-        """Handle incoming image messages — download and pass to agent with vision."""
-        import base64
+        """Handle incoming image messages — download, resize, save to workspace, pass to agent."""
 
         room_id = room.room_id
         logger.debug("Received image message: room={}, sender={}", room_id, event.sender)
@@ -355,12 +354,45 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             if info.get("mimetype"):
                 mime_type = info["mimetype"]
 
-        # Encode as base64
-        b64_data = base64.b64encode(image_data).decode("ascii")
+        # Resize and save image to group workspace
+        from pathlib import Path
+        from PIL import Image
+        import io
+        import uuid
+
+        MAX_DIMENSION = 1500  # px — enough for LLM vision, saves bandwidth
+
+        try:
+            img = Image.open(io.BytesIO(image_data))
+            # Resize if too large
+            if max(img.size) > MAX_DIMENSION:
+                img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+            # Save as JPEG (smaller than PNG for photos)
+            buf = io.BytesIO()
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.save(buf, format="JPEG", quality=82)
+            saved_bytes = buf.getvalue()
+            mime_type = "image/jpeg"
+        except Exception as e:
+            logger.warning("Image resize failed, using original: {}", e)
+            saved_bytes = image_data
+
+        # Write to group inbox directory
+        from pyldon.config import GROUPS_DIR
+        group_folder = room_config.folder if room_config else "unknown"
+        inbox_dir = GROUPS_DIR / group_folder / "inbox"
+        inbox_dir.mkdir(parents=True, exist_ok=True)
+        img_filename = f"{uuid.uuid4().hex[:12]}.jpg"
+        img_path = inbox_dir / img_filename
+        img_path.write_bytes(saved_bytes)
+
+        # Container sees this as /workspace/group/inbox/<file>
+        container_path = f"/workspace/group/inbox/{img_filename}"
 
         logger.info(
-            "Image downloaded: room={}, sender={}, size={}, mime={}",
-            room_id, event.sender, len(image_data), mime_type,
+            "Image saved: room={}, sender={}, original={}KB, saved={}KB, path={}",
+            room_id, event.sender, len(image_data) // 1024, len(saved_bytes) // 1024, img_path,
         )
 
         # Build message with image
@@ -395,7 +427,7 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             content=text_content,
             timestamp=timestamp,
             thread_id=thread_id,
-            images=[{"data": b64_data, "mimeType": mime_type}],
+            images=[{"path": str(img_path), "containerPath": container_path, "mimeType": mime_type}],
         )
 
         try:
