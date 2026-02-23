@@ -82,6 +82,7 @@ async def run(input_data: dict) -> dict:
             stderr=asyncio.subprocess.PIPE,
             env=env,
             cwd="/workspace/group",
+            limit=10 * 1024 * 1024,  # 10MB line buffer for large image payloads
         )
     except FileNotFoundError:
         return {
