@@ -60,6 +60,7 @@ from pyldon.matrix_client import (
     get_matrix_client,
     get_matrix_config,
     init_matrix_client,
+    send_matrix_audio,
     send_matrix_message,
     set_matrix_typing,
     stop_matrix_client,
@@ -417,6 +418,36 @@ async def _send_message(room_id: str, text: str) -> None:
         logger.error("Failed to send message: room={}, error={}", room_id, e)
 
 
+# Built-in sounds directory
+_SOUNDS_DIR = Path(__file__).parent.parent / "data" / "sounds"
+
+
+async def _send_audio(room_id: str, sound: str) -> None:
+    """Send an audio file to a Matrix room. Sound can be a name (e.g. 'alert') or a path."""
+    try:
+        # Resolve sound: check built-in sounds, then treat as path
+        audio_path = _SOUNDS_DIR / f"{sound}.ogg"
+        if not audio_path.exists():
+            audio_path = _SOUNDS_DIR / sound
+        if not audio_path.exists():
+            # Try with common extensions
+            for ext in (".ogg", ".mp3", ".wav", ".opus", ".m4a"):
+                candidate = _SOUNDS_DIR / f"{sound}{ext}"
+                if candidate.exists():
+                    audio_path = candidate
+                    break
+        if not audio_path.exists():
+            audio_path = Path(sound)
+        if not audio_path.exists():
+            logger.error("Sound not found: {}", sound)
+            return
+
+        await send_matrix_audio(room_id, str(audio_path))
+        logger.info("Audio sent: room={}, sound={}", room_id, sound)
+    except Exception as e:
+        logger.error("Failed to send audio: room={}, sound={}, error={}", room_id, sound, e)
+
+
 async def _process_task_ipc(
     data: dict[str, Any], source_group: str, is_main: bool
 ) -> None:
@@ -594,6 +625,13 @@ async def _start_ipc_watcher() -> None:
                                     logger.info("IPC message sent: chat={}, source={}", data["chatJid"], source_group)
                                 else:
                                     logger.warning("Unauthorized IPC message attempt: chat={}, source={}", data["chatJid"], source_group)
+                            elif data.get("type") == "audio" and data.get("chatJid") and data.get("sound"):
+                                target_group = _registered_groups.get(data["chatJid"])
+                                if is_main or (target_group and target_group.folder == source_group):
+                                    await _send_audio(data["chatJid"], data["sound"])
+                                    logger.info("IPC audio sent: chat={}, sound={}, source={}", data["chatJid"], data["sound"], source_group)
+                                else:
+                                    logger.warning("Unauthorized IPC audio attempt: chat={}, source={}", data["chatJid"], source_group)
                             msg_file.unlink()
                         except Exception as e:
                             logger.error("Error processing IPC message: file={}, source={}, error={}", msg_file, source_group, e)

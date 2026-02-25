@@ -228,6 +228,84 @@ async def set_matrix_typing(room_id: str, is_typing: bool) -> None:
         logger.debug("Failed to set typing indicator in {}: {}", room_id, e)
 
 
+async def send_matrix_audio(
+    room_id: str,
+    audio_path: str,
+    thread_id: str | None = None,
+) -> str:
+    """Upload and send an audio file to a Matrix room. Returns the event ID."""
+    from pathlib import Path
+    import mimetypes
+
+    client = get_matrix_client()
+    path = Path(audio_path)
+
+    if not path.exists():
+        logger.error("Audio file not found: {}", audio_path)
+        return ""
+
+    mime_type = mimetypes.guess_type(str(path))[0] or "audio/ogg"
+    file_size = path.stat().st_size
+
+    # Upload to Matrix content repository
+    with open(path, "rb") as f:
+        resp, _maybe_keys = await client.upload(
+            f,
+            content_type=mime_type,
+            filename=path.name,
+            filesize=file_size,
+        )
+
+    if not hasattr(resp, "content_uri"):
+        logger.error("Failed to upload audio to Matrix: {}", resp)
+        return ""
+
+    content: dict[str, Any] = {
+        "msgtype": "m.audio",
+        "body": path.name,
+        "url": resp.content_uri,
+        "info": {
+            "mimetype": mime_type,
+            "size": file_size,
+        },
+    }
+
+    # Try to get duration
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            duration_ms = int(float(result.stdout.strip()) * 1000)
+            content["info"]["duration"] = duration_ms
+    except Exception:
+        pass
+
+    if thread_id:
+        content["m.relates_to"] = {
+            "rel_type": "m.thread",
+            "event_id": thread_id,
+        }
+
+    resp2 = await client.room_send(
+        room_id=room_id,
+        message_type="m.room.message",
+        content=content,
+    )
+
+    event_id = ""
+    if isinstance(resp2, RoomSendResponse):
+        event_id = resp2.event_id
+        logger.info("Audio sent: room={}, event_id={}, file={}", room_id, event_id, path.name)
+    else:
+        logger.error("Failed to send audio to {}: {}", room_id, resp2)
+
+    return event_id
+
+
 async def stop_matrix_client() -> None:
     """Stop the Matrix client."""
     global _client

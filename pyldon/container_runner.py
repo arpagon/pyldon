@@ -107,6 +107,15 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
         readonly=False,
     ))
 
+    # Shared sounds directory — agent can download/create sounds here
+    sounds_dir = DATA_DIR / "sounds"
+    sounds_dir.mkdir(parents=True, exist_ok=True)
+    mounts.append(VolumeMount(
+        str(sounds_dir),
+        "/workspace/sounds",
+        readonly=False,
+    ))
+
     # Environment file directory (keeps credentials out of process listings)
     env_dir = DATA_DIR / "env"
     env_dir.mkdir(parents=True, exist_ok=True)

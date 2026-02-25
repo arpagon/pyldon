@@ -25,7 +25,11 @@ RUN apt-get update && apt-get install -y \
     git \
     nodejs \
     npm \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp for downloading audio from YouTube/etc
+RUN pip install --no-cache-dir yt-dlp
 
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
@@ -42,7 +46,7 @@ COPY agent_runner/ ./agent_runner/
 COPY pi-extensions/ ./pi-extensions/
 
 # Workspace dirs
-RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks
+RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/sounds
 
 # Entrypoint: load env, pipe stdin to runner
 RUN printf '#!/bin/bash\nset -e\n[ -f /workspace/env-dir/env ] && export $(cat /workspace/env-dir/env | xargs)\ncat > /tmp/input.json\ncd /app && python3 -m agent_runner.main < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh

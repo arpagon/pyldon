@@ -60,6 +60,35 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // --- send_audio ---
+  pi.registerTool({
+    name: "pyldon_send_audio",
+    label: "Send Audio",
+    description:
+      "Send a sound/audio file to the current Matrix room. " +
+      "Available sounds: 'alert' (MGS-style notification). " +
+      "Use when the user asks you to send a sound, notification, or audio clip.",
+    parameters: Type.Object({
+      sound: Type.String({
+        description: "Sound name (e.g. 'alert') or path to audio file in workspace",
+      }),
+    }),
+    async execute(_toolCallId, params) {
+      const data = {
+        type: "audio",
+        chatJid: CHAT_JID,
+        sound: params.sound,
+        groupFolder: GROUP_FOLDER,
+        timestamp: new Date().toISOString(),
+      };
+      const filename = writeIpcFile(path.join(IPC_DIR, "messages"), data);
+      return {
+        content: [{ type: "text" as const, text: `Audio queued for delivery: ${params.sound} (${filename})` }],
+        details: {},
+      };
+    },
+  });
+
   // --- schedule_task ---
   pi.registerTool({
     name: "pyldon_schedule_task",
