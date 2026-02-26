@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
