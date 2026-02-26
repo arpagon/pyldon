@@ -21,7 +21,7 @@ from pyldon.config import (
 
 
 def test_defaults():
-    assert ASSISTANT_NAME == "Andy"
+    assert ASSISTANT_NAME == "Seldon Huyang"
     assert POLL_INTERVAL == 2000
     assert MAIN_GROUP_FOLDER == "main"
     assert CONTAINER_TIMEOUT == 300000
@@ -30,9 +30,9 @@ def test_defaults():
 
 def test_trigger_pattern():
     assert isinstance(TRIGGER_PATTERN, re.Pattern)
-    assert TRIGGER_PATTERN.match("@Andy hello")
-    assert TRIGGER_PATTERN.match("@andy test")
-    assert not TRIGGER_PATTERN.match("Hello @Andy")
+    assert TRIGGER_PATTERN.match("@Seldon Huyang hello")
+    assert TRIGGER_PATTERN.match("@seldon huyang test")
+    assert not TRIGGER_PATTERN.match("Hello @Seldon Huyang")
     assert not TRIGGER_PATTERN.match("Just a message")
 
 

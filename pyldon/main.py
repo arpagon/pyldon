@@ -125,6 +125,24 @@ def _save_state() -> None:
     save_json(DATA_DIR / "sessions.json", _sessions)
 
 
+async def _get_room_name(room_id: str) -> str | None:
+    """Get the display name of a Matrix room."""
+    try:
+        client = get_matrix_client()
+        # Check local room state first
+        room = client.rooms.get(room_id)
+        if room and room.name:
+            return room.name
+        # Try fetching from server
+        from nio import RoomGetStateEventResponse
+        resp = await client.room_get_state_event(room_id, "m.room.name")
+        if isinstance(resp, RoomGetStateEventResponse) and resp.content.get("name"):
+            return resp.content["name"]
+    except Exception as e:
+        logger.debug("Could not get room name for {}: {}", room_id, e)
+    return None
+
+
 def _register_group(room_id: str, group: RegisteredGroup) -> None:
     """Register a group and persist to disk."""
     _registered_groups[room_id] = group
@@ -244,13 +262,21 @@ async def _process_matrix_message(
     elif is_main:
         folder = MAIN_GROUP_FOLDER
     else:
-        folder = f"matrix-{re.sub(r'[^a-zA-Z0-9]', '_', message.room_id)}"
+        # Try to get room name from Matrix for a clean folder name
+        room_name = await _get_room_name(message.room_id)
+        if room_name:
+            # Sanitize room name to folder-safe string
+            clean = re.sub(r'[^a-zA-Z0-9]+', '-', room_name).strip('-').lower()
+            folder = clean or f"matrix-{re.sub(r'[^a-zA-Z0-9]', '_', message.room_id)}"
+        else:
+            folder = f"matrix-{re.sub(r'[^a-zA-Z0-9]', '_', message.room_id)}"
 
     # Build group object for container runner
     group = _registered_groups.get(message.room_id)
     if group is None:
+        room_display_name = await _get_room_name(message.room_id) or folder
         group = RegisteredGroup(
-            name=folder,
+            name=room_display_name,
             folder=folder,
             trigger=f"@{ASSISTANT_NAME}",
             added_at=datetime.now(timezone.utc).isoformat(),
