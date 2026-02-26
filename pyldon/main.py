@@ -143,6 +143,11 @@ async def _get_room_name(room_id: str) -> str | None:
     return None
 
 
+def _get_group_for_room(room_id: str) -> RegisteredGroup | None:
+    """Get the registered group for a room ID."""
+    return _registered_groups.get(room_id)
+
+
 def _register_group(room_id: str, group: RegisteredGroup) -> None:
     """Register a group and persist to disk."""
     _registered_groups[room_id] = group

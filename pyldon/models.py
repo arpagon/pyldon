@@ -72,6 +72,8 @@ class RegisteredGroup(BaseModel):
     trigger: str
     added_at: str
     container_config: ContainerConfig | None = None
+    save_audio: bool = False
+    """If true, save raw audio files to the group workspace audio/ directory."""
 
 
 class NewMessage(BaseModel):

@@ -256,6 +256,23 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
         # Build message with transcription
         transcribed_content = f"[🎤 Voz]: {text}"
 
+        # Save raw audio to group workspace if group has save_audio enabled
+        try:
+            from pyldon.main import _get_group_for_room
+            group_info = _get_group_for_room(room_id)
+            if group_info and group_info.save_audio:
+                from pyldon.config import GROUPS_DIR
+                audio_dir = GROUPS_DIR / group_info.folder / "audio"
+                audio_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(filename).suffix or ".ogg"
+                audio_filename = f"{event.event_id.replace('$', '').replace(':', '_')}{ext}"
+                audio_save_path = audio_dir / audio_filename
+                audio_save_path.write_bytes(audio_data)
+                logger.info("Audio saved: {} ({} bytes)", audio_save_path, len(audio_data))
+                transcribed_content = f"[🎤 Voz (audio:{audio_filename})]: {text}"
+        except Exception as e:
+            logger.debug("Could not save raw audio: {}", e)
+
         sender_name = event.sender
         try:
             member = room.users.get(event.sender)
