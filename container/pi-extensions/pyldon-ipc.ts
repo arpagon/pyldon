@@ -96,10 +96,12 @@ export default function (pi: ExtensionAPI) {
     description:
       "Convert text to speech and send as audio message to the current Matrix room. " +
       "Uses Qwen3-TTS voice synthesis. Use when the user asks you to say something out loud, " +
-      "read something aloud, or speak. Keep text concise for faster generation (~15s per sentence).",
+      "read something aloud, or speak. Keep text concise for faster generation (~15s per sentence). " +
+      "Available voices: Huyang (default), Kofo, Lojik, Sam, Taiwo.",
     parameters: Type.Object({
       text: Type.String({ description: "Text to speak aloud" }),
       language: Type.Optional(Type.String({ description: "Language: Auto, English, Spanish, Chinese, etc. Default: Auto" })),
+      voice: Type.Optional(Type.String({ description: "Voice to use: Huyang, Kofo, Lojik, Sam, Taiwo. Default: Huyang" })),
     }),
     async execute(_toolCallId, params) {
       const data = {
@@ -107,6 +109,7 @@ export default function (pi: ExtensionAPI) {
         chatJid: CHAT_JID,
         text: params.text,
         language: params.language || "Auto",
+        voice: params.voice || "",
         groupFolder: GROUP_FOLDER,
         timestamp: new Date().toISOString(),
       };

@@ -448,16 +448,16 @@ async def _send_audio(room_id: str, sound: str) -> None:
         logger.error("Failed to send audio: room={}, sound={}, error={}", room_id, sound, e)
 
 
-async def _speak(room_id: str, text: str, language: str | None = None) -> None:
+async def _speak(room_id: str, text: str, language: str | None = None, voice: str | None = None) -> None:
     """Generate speech from text via TTS API and send to Matrix room."""
     try:
         from pyldon.tts import generate_speech
 
-        ogg_path = await generate_speech(text, language=language)
+        ogg_path = await generate_speech(text, voice=voice or None, language=language)
         if ogg_path and ogg_path.exists():
             await send_matrix_audio(room_id, str(ogg_path))
             ogg_path.unlink(missing_ok=True)
-            logger.info("Speech sent: room={}, text_len={}", room_id, len(text))
+            logger.info("Speech sent: room={}, text_len={}, voice={}", room_id, len(text), voice or "default")
         else:
             logger.error("TTS generation returned no audio: room={}", room_id)
     except Exception as e:
@@ -651,7 +651,7 @@ async def _start_ipc_watcher() -> None:
                             elif data.get("type") == "speak" and data.get("chatJid") and data.get("text"):
                                 target_group = _registered_groups.get(data["chatJid"])
                                 if is_main or (target_group and target_group.folder == source_group):
-                                    await _speak(data["chatJid"], data["text"], data.get("language"))
+                                    await _speak(data["chatJid"], data["text"], data.get("language"), data.get("voice"))
                                     logger.info("IPC speak sent: chat={}, source={}", data["chatJid"], source_group)
                                 else:
                                     logger.warning("Unauthorized IPC speak attempt: chat={}, source={}", data["chatJid"], source_group)
