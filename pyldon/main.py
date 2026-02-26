@@ -448,6 +448,22 @@ async def _send_audio(room_id: str, sound: str) -> None:
         logger.error("Failed to send audio: room={}, sound={}, error={}", room_id, sound, e)
 
 
+async def _speak(room_id: str, text: str, language: str | None = None) -> None:
+    """Generate speech from text via TTS API and send to Matrix room."""
+    try:
+        from pyldon.tts import generate_speech
+
+        ogg_path = await generate_speech(text, language=language)
+        if ogg_path and ogg_path.exists():
+            await send_matrix_audio(room_id, str(ogg_path))
+            ogg_path.unlink(missing_ok=True)
+            logger.info("Speech sent: room={}, text_len={}", room_id, len(text))
+        else:
+            logger.error("TTS generation returned no audio: room={}", room_id)
+    except Exception as e:
+        logger.error("Failed to speak: room={}, error={}", room_id, e)
+
+
 async def _process_task_ipc(
     data: dict[str, Any], source_group: str, is_main: bool
 ) -> None:
@@ -632,6 +648,13 @@ async def _start_ipc_watcher() -> None:
                                     logger.info("IPC audio sent: chat={}, sound={}, source={}", data["chatJid"], data["sound"], source_group)
                                 else:
                                     logger.warning("Unauthorized IPC audio attempt: chat={}, source={}", data["chatJid"], source_group)
+                            elif data.get("type") == "speak" and data.get("chatJid") and data.get("text"):
+                                target_group = _registered_groups.get(data["chatJid"])
+                                if is_main or (target_group and target_group.folder == source_group):
+                                    await _speak(data["chatJid"], data["text"], data.get("language"))
+                                    logger.info("IPC speak sent: chat={}, source={}", data["chatJid"], source_group)
+                                else:
+                                    logger.warning("Unauthorized IPC speak attempt: chat={}, source={}", data["chatJid"], source_group)
                             msg_file.unlink()
                         except Exception as e:
                             logger.error("Error processing IPC message: file={}, source={}, error={}", msg_file, source_group, e)

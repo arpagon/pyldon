@@ -50,3 +50,10 @@ ROOM_SYNC_INTERVAL_MS: int = 24 * 60 * 60 * 1000
 # Speech-to-text (STT) settings
 STT_ENABLED: bool = os.environ.get("PYLDON_STT_ENABLED", "false").lower() in ("true", "1", "yes")
 STT_DOCKER_IMAGE: str = os.environ.get("PYLDON_STT_IMAGE", "pyldon-stt:latest")
+
+# Text-to-speech (TTS) settings
+TTS_ENABLED: bool = os.environ.get("QWEN3_TTS_BASE_URL", "") != ""
+TTS_BASE_URL: str = os.environ.get("QWEN3_TTS_BASE_URL", "")
+TTS_API_KEY: str = os.environ.get("QWEN3_TTS_API_KEY", "")
+TTS_VOICE: str = os.environ.get("QWEN3_TTS_VOICE", "Lojik")
+TTS_LANGUAGE: str = os.environ.get("QWEN3_TTS_LANGUAGE", "Auto")

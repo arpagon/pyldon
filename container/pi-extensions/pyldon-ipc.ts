@@ -66,7 +66,7 @@ export default function (pi: ExtensionAPI) {
     label: "Send Audio",
     description:
       "Send a sound/audio file to the current Matrix room. " +
-      "Available sounds: 'alert' (MGS-style notification). " +
+      "List /workspace/sounds/ to discover available sounds. " +
       "Use when the user asks you to send a sound, notification, or audio clip.",
     parameters: Type.Object({
       sound: Type.String({
@@ -84,6 +84,35 @@ export default function (pi: ExtensionAPI) {
       const filename = writeIpcFile(path.join(IPC_DIR, "messages"), data);
       return {
         content: [{ type: "text" as const, text: `Audio queued for delivery: ${params.sound} (${filename})` }],
+        details: {},
+      };
+    },
+  });
+
+  // --- speak (TTS) ---
+  pi.registerTool({
+    name: "pyldon_speak",
+    label: "Speak",
+    description:
+      "Convert text to speech and send as audio message to the current Matrix room. " +
+      "Uses Qwen3-TTS voice synthesis. Use when the user asks you to say something out loud, " +
+      "read something aloud, or speak. Keep text concise for faster generation (~15s per sentence).",
+    parameters: Type.Object({
+      text: Type.String({ description: "Text to speak aloud" }),
+      language: Type.Optional(Type.String({ description: "Language: Auto, English, Spanish, Chinese, etc. Default: Auto" })),
+    }),
+    async execute(_toolCallId, params) {
+      const data = {
+        type: "speak",
+        chatJid: CHAT_JID,
+        text: params.text,
+        language: params.language || "Auto",
+        groupFolder: GROUP_FOLDER,
+        timestamp: new Date().toISOString(),
+      };
+      const filename = writeIpcFile(path.join(IPC_DIR, "messages"), data);
+      return {
+        content: [{ type: "text" as const, text: `Speech queued: "${params.text.substring(0, 50)}..." (${filename})` }],
         details: {},
       };
     },

@@ -1,0 +1,31 @@
+services:
+  qwen3-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qwen3-tts-server
+    runtime: nvidia
+    ports:
+      - "127.0.0.1:3011:3011"  # OpenAI-compatible API (local only)
+    volumes:
+      - ./voices:/app/voices:ro
+      - ./keys.json:/app/keys.json:ro
+      - qwen3-tts-cache:/root/.cache/huggingface
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HF_HOME=/root/.cache/huggingface
+      - CUDA_LAUNCH_BLOCKING=1
+      - TORCH_USE_CUDA_DSA=1
+    restart: unless-stopped
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+volumes:
+  qwen3-tts-cache:
+    driver: local

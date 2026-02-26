@@ -42,3 +42,6 @@ container/stt/parakeet-cli/target/
 # STT binary and models (too large for git)
 data/stt/
 data/models/
+services/qwen3-tts/voice-samples/
+services/qwen3-tts/build.log
+services/qwen3-tts/deploy.log
