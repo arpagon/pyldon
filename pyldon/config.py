@@ -15,7 +15,7 @@ def _escape_regex(s: str) -> str:
     return re.escape(s)
 
 
-ASSISTANT_NAME: str = os.environ.get("ASSISTANT_NAME", "Andy")
+ASSISTANT_NAME: str = os.environ.get("ASSISTANT_NAME", "Seldon Huyang")
 POLL_INTERVAL: int = 2000  # ms
 SCHEDULER_POLL_INTERVAL: int = 60  # seconds (was ms in TS, using seconds for asyncio)
 IPC_POLL_INTERVAL: int = 1  # seconds
