@@ -45,11 +45,16 @@ async def run(input_data: dict) -> dict:
     is_scheduled_task = input_data.get("isScheduledTask", False)
     images = input_data.get("images", [])
 
-    # Prepend identity
+    # Prepend soul + identity
+    soul_path = Path("/workspace/group/SOUL.md")
     identity_path = Path("/workspace/group/IDENTITY.md")
+    preamble = ""
+    if soul_path.exists():
+        preamble += soul_path.read_text(encoding="utf-8") + "\n\n---\n\n"
     if identity_path.exists():
-        identity = identity_path.read_text(encoding="utf-8")
-        prompt = f"{identity}\n\n---\n\n{prompt}"
+        preamble += identity_path.read_text(encoding="utf-8") + "\n\n---\n\n"
+    if preamble:
+        prompt = f"{preamble}{prompt}"
 
     # Scheduled task prefix
     if is_scheduled_task:

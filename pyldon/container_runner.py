@@ -79,12 +79,20 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
                 str(global_dir), "/workspace/global", readonly=True
             ))
 
-    # Identity file (personality, not in git) - mounted for ALL groups
+    # Identity + Soul files (personality, not in git) - mounted for ALL groups
     identity_file = DATA_DIR / "IDENTITY.md"
     if identity_file.exists():
         mounts.append(VolumeMount(
             str(identity_file),
             "/workspace/group/IDENTITY.md",
+            readonly=True,
+        ))
+
+    soul_file = DATA_DIR / "SOUL.md"
+    if soul_file.exists():
+        mounts.append(VolumeMount(
+            str(soul_file),
+            "/workspace/group/SOUL.md",
             readonly=True,
         ))
 
