@@ -496,20 +496,34 @@ async def _speak(room_id: str, text: str, language: str | None = None, voice: st
         logger.error("Failed to speak: room={}, error={}", room_id, e)
 
 
-async def _send_image(room_id: str, image_path: str, caption: str = "") -> None:
-    """Send an image file to a Matrix room, optionally with a caption."""
+async def _send_image(room_id: str, image_path: str, caption: str = "", source_group: str = "") -> None:
+    """Send an image file to a Matrix room, optionally with a caption.
+
+    Handles container path translation: /workspace/group/... → groups/{folder}/...
+    """
     try:
-        path = Path(image_path)
-        if not path.exists():
-            logger.error("Image not found: {}", image_path)
+        resolved = Path(image_path)
+
+        # Translate container paths to host paths
+        if image_path.startswith("/workspace/group/"):
+            relative = image_path.removeprefix("/workspace/group/")
+            folder = source_group or "main"
+            resolved = GROUPS_DIR / folder / relative
+        elif image_path.startswith("/workspace/"):
+            # Other workspace paths (sounds, extra, etc.)
+            relative = image_path.removeprefix("/workspace/")
+            resolved = DATA_DIR / relative
+
+        if not resolved.exists():
+            logger.error("Image not found: {} (resolved: {})", image_path, resolved)
             return
 
         # Send caption first if provided
         if caption:
             await send_matrix_message(room_id, caption)
 
-        await send_matrix_image(room_id, str(path))
-        logger.info("Image sent: room={}, path={}", room_id, image_path)
+        await send_matrix_image(room_id, str(resolved))
+        logger.info("Image sent: room={}, path={} -> {}", room_id, image_path, resolved)
     except Exception as e:
         logger.error("Failed to send image: room={}, path={}, error={}", room_id, image_path, e)
 
@@ -708,7 +722,7 @@ async def _start_ipc_watcher() -> None:
                             elif data.get("type") == "image" and data.get("chatJid") and data.get("imagePath"):
                                 target_group = _registered_groups.get(data["chatJid"])
                                 if is_main or (target_group and target_group.folder == source_group):
-                                    await _send_image(data["chatJid"], data["imagePath"], data.get("caption", ""))
+                                    await _send_image(data["chatJid"], data["imagePath"], data.get("caption", ""), source_group)
                                     logger.info("IPC image sent: chat={}, path={}, source={}", data["chatJid"], data["imagePath"], source_group)
                                 else:
                                     logger.warning("Unauthorized IPC image attempt: chat={}, source={}", data["chatJid"], source_group)
