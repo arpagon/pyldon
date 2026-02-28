@@ -62,6 +62,14 @@ class ContainerConfig(BaseModel):
     additional_mounts: list[AdditionalMount] | None = None
     timeout: int | None = None  # Default: 300000 (5 minutes)
     env: dict[str, str] | None = None
+    extra_skills_dirs: list[str] | None = None
+    """Host directories to mount as pi skills inside the container.
+
+    Each entry is an absolute path to a skill directory on the host
+    (e.g., "/home/user/.local/share/pyldon/skills/real-debrid").
+    The directory name becomes the skill name and is mounted at
+    /workspace/group/.agents/skills/{name}/ (read-only).
+    """
 
 
 class RegisteredGroup(BaseModel):

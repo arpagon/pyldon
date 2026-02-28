@@ -173,6 +173,24 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
                 readonly=bool(m["readonly"]),
             ))
 
+    # External skills directories → mounted into .agents/skills/{name}/ (read-only)
+    if group.container_config and group.container_config.extra_skills_dirs:
+        for skill_dir_str in group.container_config.extra_skills_dirs:
+            skill_path = Path(skill_dir_str).expanduser().resolve()
+            if not skill_path.is_dir():
+                logger.warning(
+                    "Extra skill dir does not exist, skipping: {}", skill_path,
+                )
+                continue
+            skill_name = skill_path.name
+            container_skill_path = f"/workspace/group/.agents/skills/{skill_name}"
+            mounts.append(VolumeMount(
+                str(skill_path), container_skill_path, readonly=True,
+            ))
+            logger.debug(
+                "Mounting external skill: {} -> {}", skill_path, container_skill_path,
+            )
+
     return mounts
 
 
