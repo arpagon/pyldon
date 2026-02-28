@@ -61,6 +61,7 @@ from pyldon.matrix_client import (
     get_matrix_config,
     init_matrix_client,
     send_matrix_audio,
+    send_matrix_image,
     send_matrix_message,
     set_matrix_typing,
     stop_matrix_client,
@@ -495,6 +496,24 @@ async def _speak(room_id: str, text: str, language: str | None = None, voice: st
         logger.error("Failed to speak: room={}, error={}", room_id, e)
 
 
+async def _send_image(room_id: str, image_path: str, caption: str = "") -> None:
+    """Send an image file to a Matrix room, optionally with a caption."""
+    try:
+        path = Path(image_path)
+        if not path.exists():
+            logger.error("Image not found: {}", image_path)
+            return
+
+        # Send caption first if provided
+        if caption:
+            await send_matrix_message(room_id, caption)
+
+        await send_matrix_image(room_id, str(path))
+        logger.info("Image sent: room={}, path={}", room_id, image_path)
+    except Exception as e:
+        logger.error("Failed to send image: room={}, path={}, error={}", room_id, image_path, e)
+
+
 async def _process_task_ipc(
     data: dict[str, Any], source_group: str, is_main: bool
 ) -> None:
@@ -686,6 +705,13 @@ async def _start_ipc_watcher() -> None:
                                     logger.info("IPC speak sent: chat={}, source={}", data["chatJid"], source_group)
                                 else:
                                     logger.warning("Unauthorized IPC speak attempt: chat={}, source={}", data["chatJid"], source_group)
+                            elif data.get("type") == "image" and data.get("chatJid") and data.get("imagePath"):
+                                target_group = _registered_groups.get(data["chatJid"])
+                                if is_main or (target_group and target_group.folder == source_group):
+                                    await _send_image(data["chatJid"], data["imagePath"], data.get("caption", ""))
+                                    logger.info("IPC image sent: chat={}, path={}, source={}", data["chatJid"], data["imagePath"], source_group)
+                                else:
+                                    logger.warning("Unauthorized IPC image attempt: chat={}, source={}", data["chatJid"], source_group)
                             msg_file.unlink()
                         except Exception as e:
                             logger.error("Error processing IPC message: file={}, source={}, error={}", msg_file, source_group, e)

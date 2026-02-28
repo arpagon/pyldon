@@ -306,6 +306,83 @@ async def send_matrix_audio(
     return event_id
 
 
+async def send_matrix_image(
+    room_id: str,
+    image_path: str,
+    thread_id: str | None = None,
+) -> str:
+    """Upload and send an image file to a Matrix room. Returns the event ID."""
+    from pathlib import Path
+    import mimetypes
+
+    client = get_matrix_client()
+    path = Path(image_path)
+
+    if not path.exists():
+        logger.error("Image file not found: {}", image_path)
+        return ""
+
+    mime_type = mimetypes.guess_type(str(path))[0] or "image/png"
+    file_size = path.stat().st_size
+
+    # Get image dimensions
+    width, height = 0, 0
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            width, height = img.size
+    except Exception:
+        pass
+
+    # Upload to Matrix content repository
+    with open(path, "rb") as f:
+        resp, _maybe_keys = await client.upload(
+            f,
+            content_type=mime_type,
+            filename=path.name,
+            filesize=file_size,
+        )
+
+    if not hasattr(resp, "content_uri"):
+        logger.error("Failed to upload image to Matrix: {}", resp)
+        return ""
+
+    content: dict[str, Any] = {
+        "msgtype": "m.image",
+        "body": path.name,
+        "url": resp.content_uri,
+        "info": {
+            "mimetype": mime_type,
+            "size": file_size,
+        },
+    }
+
+    if width and height:
+        content["info"]["w"] = width
+        content["info"]["h"] = height
+
+    if thread_id:
+        content["m.relates_to"] = {
+            "rel_type": "m.thread",
+            "event_id": thread_id,
+        }
+
+    resp2 = await client.room_send(
+        room_id=room_id,
+        message_type="m.room.message",
+        content=content,
+    )
+
+    event_id = ""
+    if isinstance(resp2, RoomSendResponse):
+        event_id = resp2.event_id
+        logger.info("Image sent: room={}, event_id={}, file={}", room_id, event_id, path.name)
+    else:
+        logger.error("Failed to send image to {}: {}", room_id, resp2)
+
+    return event_id
+
+
 async def stop_matrix_client() -> None:
     """Stop the Matrix client."""
     global _client

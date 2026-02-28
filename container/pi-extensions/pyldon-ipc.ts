@@ -89,6 +89,47 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // --- send_image ---
+  pi.registerTool({
+    name: "pyldon_send_image",
+    label: "Send Image",
+    description:
+      "Send an image file to the current Matrix room. " +
+      "Use when the user asks you to send, share, or show an image. " +
+      "The image must exist as a file in the workspace (e.g., a screenshot, generated image, or downloaded file).",
+    parameters: Type.Object({
+      image_path: Type.String({
+        description: "Absolute path to the image file (e.g., /workspace/group/screenshot.png)",
+      }),
+      caption: Type.Optional(Type.String({
+        description: "Optional caption/description for the image",
+      })),
+    }),
+    async execute(_toolCallId, params) {
+      // Verify file exists before queuing
+      if (!fs.existsSync(params.image_path)) {
+        return {
+          content: [{ type: "text" as const, text: `Error: image file not found: ${params.image_path}` }],
+          details: {},
+          isError: true,
+        };
+      }
+      const data = {
+        type: "image",
+        chatJid: CHAT_JID,
+        imagePath: params.image_path,
+        caption: params.caption || "",
+        groupFolder: GROUP_FOLDER,
+        timestamp: new Date().toISOString(),
+      };
+      const filename = writeIpcFile(path.join(IPC_DIR, "messages"), data);
+      return {
+        content: [{ type: "text" as const, text: `Image queued for delivery: ${params.image_path} (${filename})` }],
+        details: {},
+      };
+    },
+  });
+
   // --- speak (TTS) ---
   pi.registerTool({
     name: "pyldon_speak",
