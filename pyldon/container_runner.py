@@ -96,6 +96,20 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
             readonly=True,
         ))
 
+    # Project-level skills (.agents/skills/) — mount into container working dir
+    # so pi auto-discovers them alongside any per-group AGENTS.md
+    project_skills_dir = Path.cwd() / ".agents" / "skills"
+    if project_skills_dir.is_dir():
+        for skill_dir in project_skills_dir.iterdir():
+            if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                container_skill_path = f"/workspace/group/.agents/skills/{skill_dir.name}"
+                mounts.append(VolumeMount(
+                    str(skill_dir), container_skill_path, readonly=True,
+                ))
+                logger.debug(
+                    "Mounting project skill: {} -> {}", skill_dir, container_skill_path,
+                )
+
     # Per-group sessions directory (isolated from other groups)
     group_sessions_dir = DATA_DIR / "sessions" / group.folder / ".pi"
     group_sessions_dir.mkdir(parents=True, exist_ok=True)
