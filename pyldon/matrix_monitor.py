@@ -136,7 +136,46 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             if isinstance(event.source, dict):
                 formatted_body = event.source.get("content", {}).get("formatted_body", "")
             if not formatted_body or not mention_pattern.search(formatted_body):
-                logger.debug("Message ignored - no trigger/mention: room={}", room_id)
+                # No mention — but if group has observe_all_messages, store it silently
+                from pyldon.main import _get_group_for_room
+                group_info = _get_group_for_room(room_id)
+                if group_info and group_info.observe_all_messages:
+                    from pyldon.db import store_group_history, store_message, store_chat_metadata
+                    from datetime import datetime, timezone
+
+                    sender_name = event.sender
+                    try:
+                        member = room.users.get(event.sender)
+                        if member and member.display_name:
+                            sender_name = member.display_name
+                    except Exception:
+                        pass
+
+                    ts = getattr(event, "server_timestamp", None) or 0
+                    timestamp = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).isoformat()
+
+                    await store_message(
+                        id=event.event_id,
+                        chat_id=room_id,
+                        sender=event.sender,
+                        sender_name=sender_name,
+                        content=text,
+                        timestamp=timestamp,
+                        is_from_me=False,
+                    )
+                    await store_group_history(
+                        group_info.folder,
+                        id=event.event_id,
+                        sender=event.sender,
+                        sender_name=sender_name,
+                        content=text,
+                        timestamp=timestamp,
+                        is_from_me=False,
+                    )
+                    await store_chat_metadata(room_id, timestamp, sender_name)
+                    logger.debug("Message observed (no mention): room={}, sender={}", room_id, sender_name)
+                else:
+                    logger.debug("Message ignored - no trigger/mention: room={}", room_id)
                 return
 
         # Get sender display name

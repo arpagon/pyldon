@@ -88,6 +88,12 @@ class RegisteredGroup(BaseModel):
     Useful for groups where members (e.g., elderly family) send voice messages
     and the agent should always listen, transcribe, and decide whether to respond.
     """
+    observe_all_messages: bool = False
+    """If true, store all messages in the DB even without a mention.
+
+    The agent is only invoked when mentioned, but has full conversation
+    history as context. Enables commands like "summarize the discussion".
+    """
 
 
 class NewMessage(BaseModel):

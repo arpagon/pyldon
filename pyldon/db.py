@@ -10,7 +10,7 @@ from pathlib import Path
 import aiosqlite
 from loguru import logger
 
-from pyldon.config import STORE_DIR
+from pyldon.config import GROUPS_DIR, STORE_DIR
 from pyldon.models import (
     ChatInfo,
     NewMessage,
@@ -69,6 +69,52 @@ CREATE TABLE IF NOT EXISTS task_run_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at);
 """
+
+GROUP_HISTORY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    sender TEXT,
+    sender_name TEXT,
+    content TEXT,
+    timestamp TEXT,
+    is_from_me INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_history_timestamp ON messages(timestamp);
+"""
+
+
+async def store_group_history(
+    group_folder: str,
+    *,
+    id: str,
+    sender: str,
+    sender_name: str,
+    content: str,
+    timestamp: str,
+    is_from_me: bool,
+) -> None:
+    """Store a message in the per-group history DB.
+
+    Written to groups/{folder}/history.db — visible to the container
+    at /workspace/group/history.db for direct queries by the agent.
+    """
+    history_path = GROUPS_DIR / group_folder / "history.db"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        async with aiosqlite.connect(str(history_path)) as db:
+            await db.executescript(GROUP_HISTORY_SCHEMA)
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO messages
+                    (id, sender, sender_name, content, timestamp, is_from_me)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (id, sender, sender_name, content, timestamp, 1 if is_from_me else 0),
+            )
+            await db.commit()
+    except Exception as e:
+        logger.debug("Failed to write group history: folder={}, error={}", group_folder, e)
 
 
 async def init_database() -> None:

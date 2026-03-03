@@ -52,6 +52,7 @@ from pyldon.db import (
     init_database,
     set_last_group_sync,
     store_chat_metadata,
+    store_group_history,
     store_message,
     update_chat_name,
     update_task,
@@ -299,6 +300,15 @@ async def _process_matrix_message(
         timestamp=message.timestamp,
         is_from_me=False,
     )
+    await store_group_history(
+        group.folder,
+        id=message.event_id,
+        sender=message.sender,
+        sender_name=message.sender_name,
+        content=message.content,
+        timestamp=message.timestamp,
+        is_from_me=False,
+    )
 
     # Store chat metadata
     await store_chat_metadata(message.room_id, message.timestamp, message.sender_name)
@@ -354,13 +364,23 @@ async def _process_matrix_message(
         await send_matrix_message(message.room_id, response, message.thread_id)
 
         # Store bot response in DB for conversation context
+        bot_timestamp = datetime.now(timezone.utc).isoformat()
         await store_message(
             id=f"bot-{message.event_id}",
             chat_id=message.room_id,
             sender="bot",
             sender_name=ASSISTANT_NAME,
             content=response,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=bot_timestamp,
+            is_from_me=True,
+        )
+        await store_group_history(
+            group.folder,
+            id=f"bot-{message.event_id}",
+            sender="bot",
+            sender_name=ASSISTANT_NAME,
+            content=response,
+            timestamp=bot_timestamp,
             is_from_me=True,
         )
 
@@ -437,15 +457,29 @@ async def _send_message(room_id: str, text: str) -> None:
         logger.info("Message sent: room={}, length={}", room_id, len(text))
 
         # Store bot message in DB for conversation context
+        msg_id = f"bot-ipc-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        bot_timestamp = datetime.now(timezone.utc).isoformat()
         await store_message(
-            id=f"bot-ipc-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+            id=msg_id,
             chat_id=room_id,
             sender="bot",
             sender_name=ASSISTANT_NAME,
             content=text,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=bot_timestamp,
             is_from_me=True,
         )
+        # Also write to per-group history
+        group = _registered_groups.get(room_id)
+        if group:
+            await store_group_history(
+                group.folder,
+                id=msg_id,
+                sender="bot",
+                sender_name=ASSISTANT_NAME,
+                content=text,
+                timestamp=bot_timestamp,
+                is_from_me=True,
+            )
     except Exception as e:
         logger.error("Failed to send message: room={}, error={}", room_id, e)
 
