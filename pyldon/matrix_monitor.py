@@ -235,14 +235,20 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
 
         if not is_dm:
             # For group chats, only process if mention is not required or main room
-            require_mention = (
-                room_config.require_mention
-                if room_config and room_config.require_mention is not None
-                else config.require_mention if not is_main else False
-            )
-            if require_mention:
-                logger.debug("Audio in group chat requires mention, skipping: room={}", room_id)
-                return
+            # Exception: groups with always_process_audio bypass mention check
+            from pyldon.main import _get_group_for_room
+            group_info = _get_group_for_room(room_id)
+            skip_mention = group_info and group_info.always_process_audio
+
+            if not skip_mention:
+                require_mention = (
+                    room_config.require_mention
+                    if room_config and room_config.require_mention is not None
+                    else config.require_mention if not is_main else False
+                )
+                if require_mention:
+                    logger.debug("Audio in group chat requires mention, skipping: room={}", room_id)
+                    return
 
         # Download audio from Matrix (handles encrypted + unencrypted)
         audio_data = await _download_media(client, event)

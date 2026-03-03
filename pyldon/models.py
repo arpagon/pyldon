@@ -82,6 +82,12 @@ class RegisteredGroup(BaseModel):
     container_config: ContainerConfig | None = None
     save_audio: bool = False
     """If true, save raw audio files to the group workspace audio/ directory."""
+    always_process_audio: bool = False
+    """If true, always process audio messages without requiring a mention.
+
+    Useful for groups where members (e.g., elderly family) send voice messages
+    and the agent should always listen, transcribe, and decide whether to respond.
+    """
 
 
 class NewMessage(BaseModel):
