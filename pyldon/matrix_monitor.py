@@ -130,8 +130,14 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
         )
 
         if require_mention and not mention_pattern.search(text) and not TRIGGER_PATTERN.search(text):
-            logger.debug("Message ignored - no trigger/mention: room={}", room_id)
-            return
+            # Also check formatted_body (HTML) — Matrix mentions appear there
+            # as <a href="https://matrix.to/#/@user:server">Name</a>
+            formatted_body = ""
+            if isinstance(event.source, dict):
+                formatted_body = event.source.get("content", {}).get("formatted_body", "")
+            if not formatted_body or not mention_pattern.search(formatted_body):
+                logger.debug("Message ignored - no trigger/mention: room={}", room_id)
+                return
 
         # Get sender display name
         sender_name = event.sender
