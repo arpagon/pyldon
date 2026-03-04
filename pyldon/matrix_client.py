@@ -27,6 +27,64 @@ _client: AsyncClient | None = None
 _config: MatrixConfig | None = None
 
 
+async def _trust_unknown_devices_in_room(room_id: str) -> bool:
+    """Trust any unverified devices for users in a room.
+
+    Returns True if any new devices were trusted.
+    Called automatically before sending encrypted messages.
+    """
+    client = get_matrix_client()
+    if not client.olm:
+        return False
+
+    trusted_any = False
+    room = client.rooms.get(room_id)
+    if not room:
+        return False
+
+    for user_id in room.users:
+        devices = client.device_store.active_user_devices(user_id)
+        for device in devices:
+            if not client.olm.is_device_verified(device):
+                logger.info(
+                    "E2EE: auto-trusting new device {} of user {}",
+                    device.device_id,
+                    user_id,
+                )
+                client.verify_device(device)
+                trusted_any = True
+
+    return trusted_any
+
+
+async def _room_send_with_trust(room_id: str, content: dict[str, Any]) -> Any:
+    """Send a room message, auto-trusting new devices on failure and retrying once."""
+    client = get_matrix_client()
+
+    resp = await client.room_send(
+        room_id=room_id,
+        message_type="m.room.message",
+        content=content,
+    )
+
+    if not isinstance(resp, RoomSendResponse):
+        error_str = str(resp)
+        if "not verified" in error_str or "blacklisted" in error_str:
+            logger.warning("E2EE: unverified device in {}, trusting and retrying...", room_id)
+            try:
+                await client.keys_query()
+            except Exception:
+                pass
+            if await _trust_unknown_devices_in_room(room_id):
+                resp = await client.room_send(
+                    room_id=room_id,
+                    message_type="m.room.message",
+                    content=content,
+                )
+
+    return resp
+
+
 def load_matrix_config() -> MatrixConfig:
     """Load Matrix configuration from file or environment variables."""
     import os
@@ -203,11 +261,7 @@ async def send_matrix_message(
             "event_id": thread_id,
         }
 
-    resp = await client.room_send(
-        room_id=room_id,
-        message_type="m.room.message",
-        content=content,
-    )
+    resp = await _room_send_with_trust(room_id, content)
 
     event_id = ""
     if isinstance(resp, RoomSendResponse):
@@ -290,11 +344,7 @@ async def send_matrix_audio(
             "event_id": thread_id,
         }
 
-    resp2 = await client.room_send(
-        room_id=room_id,
-        message_type="m.room.message",
-        content=content,
-    )
+    resp2 = await _room_send_with_trust(room_id, content)
 
     event_id = ""
     if isinstance(resp2, RoomSendResponse):
@@ -367,11 +417,7 @@ async def send_matrix_image(
             "event_id": thread_id,
         }
 
-    resp2 = await client.room_send(
-        room_id=room_id,
-        message_type="m.room.message",
-        content=content,
-    )
+    resp2 = await _room_send_with_trust(room_id, content)
 
     event_id = ""
     if isinstance(resp2, RoomSendResponse):
