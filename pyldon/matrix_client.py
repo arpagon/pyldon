@@ -301,13 +301,18 @@ async def send_matrix_audio(
     mime_type = mimetypes.guess_type(str(path))[0] or "audio/ogg"
     file_size = path.stat().st_size
 
+    # Check if room is encrypted
+    room = client.rooms.get(room_id)
+    is_encrypted = room.encrypted if room else False
+
     # Upload to Matrix content repository
     with open(path, "rb") as f:
-        resp, _maybe_keys = await client.upload(
+        resp, maybe_keys = await client.upload(
             f,
             content_type=mime_type,
             filename=path.name,
             filesize=file_size,
+            encrypt=is_encrypted,
         )
 
     if not hasattr(resp, "content_uri"):
@@ -317,12 +322,22 @@ async def send_matrix_audio(
     content: dict[str, Any] = {
         "msgtype": "m.audio",
         "body": path.name,
-        "url": resp.content_uri,
         "info": {
             "mimetype": mime_type,
             "size": file_size,
         },
     }
+
+    if is_encrypted and maybe_keys:
+        content["file"] = {
+            "url": resp.content_uri,
+            "key": maybe_keys["key"],
+            "iv": maybe_keys["iv"],
+            "hashes": maybe_keys["hashes"],
+            "v": maybe_keys["v"],
+        }
+    else:
+        content["url"] = resp.content_uri
 
     # Try to get duration
     try:
@@ -384,13 +399,18 @@ async def send_matrix_image(
     except Exception:
         pass
 
+    # Check if room is encrypted
+    room = client.rooms.get(room_id)
+    is_encrypted = room.encrypted if room else False
+
     # Upload to Matrix content repository
     with open(path, "rb") as f:
-        resp, _maybe_keys = await client.upload(
+        resp, maybe_keys = await client.upload(
             f,
             content_type=mime_type,
             filename=path.name,
             filesize=file_size,
+            encrypt=is_encrypted,
         )
 
     if not hasattr(resp, "content_uri"):
@@ -400,12 +420,22 @@ async def send_matrix_image(
     content: dict[str, Any] = {
         "msgtype": "m.image",
         "body": path.name,
-        "url": resp.content_uri,
         "info": {
             "mimetype": mime_type,
             "size": file_size,
         },
     }
+
+    if is_encrypted and maybe_keys:
+        content["file"] = {
+            "url": resp.content_uri,
+            "key": maybe_keys["key"],
+            "iv": maybe_keys["iv"],
+            "hashes": maybe_keys["hashes"],
+            "v": maybe_keys["v"],
+        }
+    else:
+        content["url"] = resp.content_uri
 
     if width and height:
         content["info"]["w"] = width

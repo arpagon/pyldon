@@ -1,7 +1,11 @@
 # Pyldon Agent Container
 # Runs pi.dev agent in isolated container with browser automation
 
+FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.12-slim
+
+# uv package manager
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 # System dependencies for Chromium
 RUN apt-get update && apt-get install -y \
@@ -30,6 +34,9 @@ RUN apt-get update && apt-get install -y \
 
 # yt-dlp for downloading audio from YouTube/etc
 RUN pip install --no-cache-dir yt-dlp
+
+# nanobanana dependencies (image generation via Gemini)
+RUN pip install --no-cache-dir google-genai Pillow python-dotenv
 
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium

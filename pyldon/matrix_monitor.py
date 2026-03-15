@@ -391,14 +391,20 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             pass
 
         if not is_dm:
-            require_mention = (
-                room_config.require_mention
-                if room_config and room_config.require_mention is not None
-                else config.require_mention if not is_main else False
-            )
-            if require_mention:
-                logger.debug("Image in group chat requires mention, skipping: room={}", room_id)
-                return
+            # Check if group bypasses mention requirement (like audio does)
+            from pyldon.main import _get_group_for_room
+            group_info = _get_group_for_room(room_id)
+            skip_mention = group_info and (group_info.observe_all_messages or group_info.always_process_audio)
+
+            if not skip_mention:
+                require_mention = (
+                    room_config.require_mention
+                    if room_config and room_config.require_mention is not None
+                    else config.require_mention if not is_main else False
+                )
+                if require_mention:
+                    logger.debug("Image in group chat requires mention, skipping: room={}", room_id)
+                    return
 
         # Download image from Matrix (handles encrypted + unencrypted)
         image_data = await _download_media(client, event)
@@ -447,26 +453,28 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             logger.warning("Image resize failed, using original: {}", e)
             saved_bytes = image_data
 
-        # Write to group inbox directory
+        # Write to group images directory (like audio/ for voice messages)
         from pyldon.config import GROUPS_DIR
-        group_folder = room_config.folder if room_config else "unknown"
-        inbox_dir = GROUPS_DIR / group_folder / "inbox"
-        inbox_dir.mkdir(parents=True, exist_ok=True)
-        img_filename = f"{uuid.uuid4().hex[:12]}.jpg"
-        img_path = inbox_dir / img_filename
+        from pyldon.main import _get_group_for_room
+        group_reg = _get_group_for_room(room_id)
+        group_folder = group_reg.folder if group_reg else (room_config.folder if room_config else "unknown")
+        images_dir = GROUPS_DIR / group_folder / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        img_filename = f"{event.event_id.replace('$', '').replace(':', '_')}.jpg"
+        img_path = images_dir / img_filename
         img_path.write_bytes(saved_bytes)
 
-        # Container sees this as /workspace/group/inbox/<file>
-        container_path = f"/workspace/group/inbox/{img_filename}"
+        # Container sees this as /workspace/group/images/<file>
+        container_path = f"/workspace/group/images/{img_filename}"
 
         logger.info(
             "Image saved: room={}, sender={}, original={}KB, saved={}KB, path={}",
             room_id, event.sender, len(image_data) // 1024, len(saved_bytes) // 1024, img_path,
         )
 
-        # Build message with image
+        # Build message with image reference (like audio does with [🎤 Voz (audio:file)])
         caption = event.body if event.body and not event.body.startswith("image") else ""
-        text_content = f"[🖼️ Image: {filename}]" + (f" {caption}" if caption else "")
+        text_content = f"[🖼️ Imagen (image:{img_filename})]: {caption}" if caption else f"[🖼️ Imagen (image:{img_filename})]"
 
         sender_name = event.sender
         try:

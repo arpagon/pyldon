@@ -1,3 +1,5 @@
+![Pyldon Banner](banner.png)
+
 # Pyldon
 
 Personal AI assistant written in Python. Runs [pi.dev](https://github.com/badlogic/pi-mono) agents in isolated Docker containers with per-room filesystem separation. Rewrite of [NanoClaw](https://github.com/arpagon/nanoclaw) (TypeScript).
