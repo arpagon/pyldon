@@ -135,9 +135,10 @@ export default function (pi: ExtensionAPI) {
     name: "pyldon_speak",
     label: "Speak",
     description:
-      "Convert text to speech and send as audio message to the current Matrix room. " +
-      "Uses Qwen3-TTS voice synthesis. Use when the user asks you to say something out loud, " +
-      "read something aloud, or speak. Keep text concise for faster generation (~15s per sentence). " +
+      "Convert text to speech and send as a single audio message to the current Matrix room. " +
+      "Uses Qwen3-TTS. Use newlines (\\n) to mark semantic breaks (paragraphs, ideas, pauses). " +
+      "Pyldon handles chunking, parallel generation, and concatenation automatically. " +
+      "No length limit — send as much text as you need in ONE call. " +
       "Available voices: Huyang (default), Kofo, Lojik, Sam, Taiwo.",
     parameters: Type.Object({
       text: Type.String({ description: "Text to speak aloud" }),
