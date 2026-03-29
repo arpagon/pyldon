@@ -27,9 +27,14 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
-    nodejs \
-    npm \
     ffmpeg \
+    ca-certificates \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 24.x (required by pi-web-providers)
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp for downloading audio from YouTube/etc
@@ -43,6 +48,9 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # pi.dev agent (CLI + SDK + coding tools)
 RUN npm install -g @mariozechner/pi-coding-agent agent-browser
+
+# pi-web-providers extension (web search, contents, answers, research)
+RUN npm install -g pi-web-providers
 
 WORKDIR /app
 
