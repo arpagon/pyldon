@@ -358,6 +358,16 @@ async def _process_matrix_message(
     response = await _run_agent(group, prompt, message.room_id, images=message.images)
     await set_matrix_typing(message.room_id, False)
 
+    if not response:
+        # Notify user about the failure instead of silently dropping
+        error_detail = getattr(_run_agent, '_last_error', None) or "unknown error"
+        await send_matrix_message(
+            message.room_id,
+            f"⚠️ Failed to process your message ({error_detail}). Please try again.",
+            message.thread_id,
+        )
+        return
+
     if response:
         _last_agent_timestamp[message.room_id] = message.timestamp
         _save_state()
@@ -439,11 +449,13 @@ async def _run_agent(
 
         if output.status == "error":
             logger.error("Container agent error: group={}, error={}", group.name, output.error)
+            _run_agent._last_error = output.error
             return None
 
         return output.result
     except Exception as e:
         logger.error("Agent error: group={}, error={}", group.name, e)
+        _run_agent._last_error = str(e)
         return None
 
 
