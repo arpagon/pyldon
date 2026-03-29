@@ -113,6 +113,18 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
     # Per-group sessions directory (isolated from other groups)
     group_sessions_dir = DATA_DIR / "sessions" / group.folder / ".pi"
     group_sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sync shared pi config (e.g., web-providers.json) into per-group session
+    shared_pi_config_dir = DATA_DIR / "pi-config"
+    if shared_pi_config_dir.is_dir():
+        agent_dir = group_sessions_dir / "agent"
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        for config_file in shared_pi_config_dir.iterdir():
+            if config_file.is_file():
+                dest = agent_dir / config_file.name
+                if not dest.exists() or dest.read_bytes() != config_file.read_bytes():
+                    dest.write_bytes(config_file.read_bytes())
+
     mounts.append(VolumeMount(
         str(group_sessions_dir),
         "/home/pyldon/.pi",
@@ -189,6 +201,8 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
 
     # External skills directories → mounted into .agents/skills/{name}/ (read-only)
     if group.container_config and group.container_config.extra_skills_dirs:
+        # Collect existing container mount points to avoid duplicates
+        existing_container_paths = {m.container_path for m in mounts}
         for skill_dir_str in group.container_config.extra_skills_dirs:
             skill_path = Path(skill_dir_str).expanduser().resolve()
             if not skill_path.is_dir():
@@ -198,9 +212,16 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
                 continue
             skill_name = skill_path.name
             container_skill_path = f"/workspace/group/.agents/skills/{skill_name}"
+            if container_skill_path in existing_container_paths:
+                logger.debug(
+                    "Skipping duplicate mount for skill: {} (already mounted at {})",
+                    skill_name, container_skill_path,
+                )
+                continue
             mounts.append(VolumeMount(
                 str(skill_path), container_skill_path, readonly=True,
             ))
+            existing_container_paths.add(container_skill_path)
             logger.debug(
                 "Mounting external skill: {} -> {}", skill_path, container_skill_path,
             )
