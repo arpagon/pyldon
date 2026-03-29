@@ -25,6 +25,10 @@ PI_MODEL = os.environ.get("PYLDON_PI_MODEL", "")
 PI_EXTENSION = os.environ.get(
     "PYLDON_PI_EXTENSION", "/app/pi-extensions/pyldon-ipc.ts"
 )
+PI_EXTRA_EXTENSIONS = os.environ.get(
+    "PYLDON_PI_EXTRA_EXTENSIONS",
+    "/usr/lib/node_modules/pi-web-providers/dist/index.js"
+)
 
 
 def log(msg: str) -> None:
@@ -66,6 +70,12 @@ async def run(input_data: dict) -> dict:
 
     # Build pi command
     cmd = [PI_BINARY, "--mode", "rpc", "--no-session", "-e", PI_EXTENSION]
+    # Add extra extensions (comma-separated)
+    if PI_EXTRA_EXTENSIONS:
+        for ext in PI_EXTRA_EXTENSIONS.split(","):
+            ext = ext.strip()
+            if ext:
+                cmd.extend(["-e", ext])
     if PI_PROVIDER:
         cmd.extend(["--provider", PI_PROVIDER])
     if PI_MODEL:
