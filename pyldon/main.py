@@ -341,6 +341,18 @@ async def _process_matrix_message(
             .replace('"', "&quot;")
         )
 
+    # Parse timeout tag ⏱️Xm from the triggering (last) message
+    timeout_override: int | None = None
+    timeout_match = re.search(r'⏱️?(\d+)m', all_messages[-1].content if all_messages else "")
+    if timeout_match:
+        minutes = int(timeout_match.group(1))
+        timeout_override = minutes * 60_000  # 0 means unlimited (handled downstream)
+        # Strip the tag from the last message content so the agent doesn't see it
+        all_messages[-1] = all_messages[-1].model_copy(
+            update={"content": re.sub(r'\s*⏱️?\d+m\s*', ' ', all_messages[-1].content).strip()}
+        )
+        logger.info("Timeout override: {}m ({}ms) for group={}", minutes, timeout_override, group.name)
+
     lines = [
         f'<message sender="{_escape_xml(m.sender_name)}" time="{m.timestamp}">{_escape_xml(m.content)}</message>'
         for m in all_messages
@@ -355,7 +367,7 @@ async def _process_matrix_message(
 
     await set_matrix_typing(message.room_id, True)
     logger.debug("Passing images to agent: count={}", len(message.images))
-    response = await _run_agent(group, prompt, message.room_id, images=message.images)
+    response = await _run_agent(group, prompt, message.room_id, images=message.images, timeout_override=timeout_override)
     await set_matrix_typing(message.room_id, False)
 
     if not response:
@@ -398,6 +410,7 @@ async def _process_matrix_message(
 async def _run_agent(
     group: RegisteredGroup, prompt: str, chat_id: str,
     images: list[dict[str, str]] | None = None,
+    timeout_override: int | None = None,
 ) -> str | None:
     """Run the agent in a container and return the response."""
     is_main = is_main_room(chat_id)
@@ -441,6 +454,7 @@ async def _run_agent(
                 is_main=is_main,
                 images=images or [],
             ),
+            timeout_override=timeout_override,
         )
 
         if output.new_session_id:

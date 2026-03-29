@@ -22,6 +22,7 @@ from pyldon.config import (
     CONTAINER_TIMEOUT,
     DATA_DIR,
     GROUPS_DIR,
+    MAX_CONTAINER_TIMEOUT,
 )
 from pyldon.models import (
     AdditionalMount,
@@ -254,6 +255,7 @@ def _build_docker_args(mounts: list[VolumeMount]) -> list[str]:
 async def run_container_agent(
     group: RegisteredGroup,
     input_data: ContainerInput,
+    timeout_override: int | None = None,
 ) -> ContainerOutput:
     """Spawn a Docker container to run the agent.
 
@@ -280,11 +282,12 @@ async def run_container_agent(
     logs_dir = GROUPS_DIR / group.folder / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    timeout = (
-        group.container_config.timeout
-        if group.container_config and group.container_config.timeout
-        else CONTAINER_TIMEOUT
-    )
+    if timeout_override is not None:
+        timeout = MAX_CONTAINER_TIMEOUT if timeout_override == 0 else timeout_override
+    elif group.container_config and group.container_config.timeout:
+        timeout = group.container_config.timeout
+    else:
+        timeout = CONTAINER_TIMEOUT
 
     try:
         process = await asyncio.create_subprocess_exec(

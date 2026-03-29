@@ -33,6 +33,7 @@ MAIN_GROUP_FOLDER: str = "main"
 
 CONTAINER_IMAGE: str = os.environ.get("CONTAINER_IMAGE", "pyldon-agent:latest")
 CONTAINER_TIMEOUT: int = int(os.environ.get("CONTAINER_TIMEOUT", "300000"))
+MAX_CONTAINER_TIMEOUT: int = int(os.environ.get("MAX_CONTAINER_TIMEOUT", "86400000"))  # 24h safety net
 CONTAINER_MAX_OUTPUT_SIZE: int = int(
     os.environ.get("CONTAINER_MAX_OUTPUT_SIZE", "10485760")
 )  # 10MB default
