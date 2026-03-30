@@ -218,19 +218,47 @@ def _get_available_groups() -> list[dict[str, Any]]:
 
 async def _get_available_groups_async() -> list[dict[str, Any]]:
     """Get available rooms for the agent (async version)."""
+    from pyldon.matrix_client import get_matrix_client
+
     chats = await get_all_chats()
     registered_ids = set(_registered_groups.keys())
+    client = get_matrix_client()
 
-    return [
-        {
+    result = []
+    for c in chats:
+        if c.jid == "__group_sync__" or not c.jid.startswith("!"):
+            continue
+
+        group_info: dict[str, Any] = {
             "jid": c.jid,
             "name": c.name,
             "lastActivity": c.last_message_time,
             "isRegistered": c.jid in registered_ids,
         }
-        for c in chats
-        if c.jid != "__group_sync__" and c.jid.startswith("!")
-    ]
+
+        # Add registered group metadata
+        reg = _registered_groups.get(c.jid)
+        if reg:
+            group_info["folder"] = reg.folder
+            group_info["save_audio"] = reg.save_audio
+            group_info["observe_all_messages"] = reg.observe_all_messages
+
+        # Add room members
+        room = client.rooms.get(c.jid)
+        if room:
+            members = []
+            for user_id, member in room.users.items():
+                if user_id == client.user_id:
+                    continue  # skip self
+                members.append({
+                    "user_id": user_id,
+                    "display_name": member.display_name or user_id,
+                })
+            group_info["members"] = members
+
+        result.append(group_info)
+
+    return result
 
 
 # --- Message Processing ---

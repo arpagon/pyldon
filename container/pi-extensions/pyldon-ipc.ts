@@ -404,4 +404,35 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
+
+  // --- list_groups ---
+  pi.registerTool({
+    name: "pyldon_list_groups",
+    label: "List Groups",
+    description:
+      "List all available Matrix rooms/groups with their members, folders, and config. " +
+      "Only available from the main group. Shows registered and unregistered rooms.",
+    parameters: Type.Object({}),
+    async execute() {
+      if (!IS_MAIN) {
+        return {
+          content: [{ type: "text" as const, text: "Only the main group can list all groups." }],
+          details: {},
+        };
+      }
+      const groupsFile = path.join(IPC_DIR, "available_groups.json");
+      try {
+        const data = fs.readFileSync(groupsFile, "utf-8");
+        return {
+          content: [{ type: "text" as const, text: data }],
+          details: {},
+        };
+      } catch {
+        return {
+          content: [{ type: "text" as const, text: "No groups data available. Try pyldon_refresh_groups first." }],
+          details: {},
+        };
+      }
+    },
+  });
 }
