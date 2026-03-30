@@ -143,7 +143,7 @@ class MatrixConfig(BaseModel):
 
     homeserver: str
     user_id: str
-    access_token: str
+    access_token: str | None = None
     password: str | None = None
     """Password for login-based auth (needed for E2EE device key generation)."""
 
