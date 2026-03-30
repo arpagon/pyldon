@@ -39,17 +39,29 @@ export default function (pi: ExtensionAPI) {
     name: "pyldon_send_message",
     label: "Send Message",
     description:
-      "Send a message to the current Matrix room. Use this to communicate with the user, " +
-      "especially during long tasks or scheduled tasks where results are not automatically sent.",
+      "Send a message to a Matrix room. By default sends to the current room. " +
+      "From the main group, you can send to other groups by specifying target_group (folder name). " +
+      "Use this to communicate with the user or send cross-room messages.",
     parameters: Type.Object({
       text: Type.String({ description: "Message text to send" }),
+      target_group: Type.Optional(
+        Type.String({ description: "Target group folder name to send to (main only, omit for current room)" })
+      ),
     }),
     async execute(_toolCallId, params) {
+      // Resolve target: if main and target_group specified, look up the room ID for that group
+      let targetChatJid = CHAT_JID;
+      let targetGroupFolder = GROUP_FOLDER;
+      if (IS_MAIN && params.target_group) {
+        targetGroupFolder = params.target_group;
+        // The host side resolves group folder → room ID; pass the folder as chatJid hint
+        targetChatJid = `group:${params.target_group}`;
+      }
       const data = {
         type: "message",
-        chatJid: CHAT_JID,
+        chatJid: targetChatJid,
         text: params.text,
-        groupFolder: GROUP_FOLDER,
+        groupFolder: targetGroupFolder,
         timestamp: new Date().toISOString(),
       };
       const filename = writeIpcFile(path.join(IPC_DIR, "messages"), data);

@@ -759,10 +759,24 @@ async def _start_ipc_watcher() -> None:
                         try:
                             data = json.loads(msg_file.read_text(encoding="utf-8"))
                             if data.get("type") == "message" and data.get("chatJid") and data.get("text"):
-                                target_group = _registered_groups.get(data["chatJid"])
+                                chat_jid = data["chatJid"]
+                                # Resolve group:folder-name → actual room ID
+                                if chat_jid.startswith("group:") and is_main:
+                                    folder_name = chat_jid[len("group:"):]
+                                    resolved = next(
+                                        (rid for rid, g in _registered_groups.items() if g.folder == folder_name),
+                                        None,
+                                    )
+                                    if resolved:
+                                        chat_jid = resolved
+                                    else:
+                                        logger.warning("IPC message: unknown target group folder: {}", folder_name)
+                                        msg_file.unlink(missing_ok=True)
+                                        continue
+                                target_group = _registered_groups.get(chat_jid)
                                 if is_main or (target_group and target_group.folder == source_group):
-                                    await _send_message(data["chatJid"], data["text"])
-                                    logger.info("IPC message sent: chat={}, source={}", data["chatJid"], source_group)
+                                    await _send_message(chat_jid, data["text"])
+                                    logger.info("IPC message sent: chat={}, source={}", chat_jid, source_group)
                                 else:
                                     logger.warning("Unauthorized IPC message attempt: chat={}, source={}", data["chatJid"], source_group)
                             elif data.get("type") == "audio" and data.get("chatJid") and data.get("sound"):
