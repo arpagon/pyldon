@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -230,9 +231,9 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
     return mounts
 
 
-def _build_docker_args(mounts: list[VolumeMount]) -> list[str]:
+def _build_docker_args(mounts: list[VolumeMount], container_name: str) -> list[str]:
     """Build docker run arguments from mounts."""
-    args = ["run", "-i", "--rm"]
+    args = ["run", "-i", "--rm", "--name", container_name]
 
     # Load environment variables from env file and pass via -e
     env_file = DATA_DIR / "env" / "env"
@@ -267,7 +268,8 @@ async def run_container_agent(
     group_dir.mkdir(parents=True, exist_ok=True)
 
     mounts = _build_volume_mounts(group, input_data.is_main)
-    docker_args = _build_docker_args(mounts)
+    container_name = f"pyldon-{group.folder}-{uuid.uuid4().hex[:8]}"
+    docker_args = _build_docker_args(mounts, container_name)
 
     logger.debug(
         "Container mount config: group={}, mounts={}",
@@ -316,6 +318,51 @@ async def run_container_agent(
         logger.error("Container timeout, killing: group={}", group.name)
         process.kill()
         await process.wait()
+        # Also kill the Docker container explicitly, since process.kill() only
+        # kills the 'docker run' client; the container itself may keep running.
+        try:
+            kill_proc = await asyncio.create_subprocess_exec(
+                "docker", "kill", container_name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(kill_proc.wait(), timeout=10)
+            logger.info("Docker container killed: {}", container_name)
+        except Exception as e:
+            logger.warning("Failed to kill Docker container {}: {}", container_name, e)
+        # Collect whatever output the container produced before the timeout
+        partial_stdout = ""
+        partial_stderr = ""
+        try:
+            if process.stdout:
+                raw = await asyncio.wait_for(process.stdout.read(), timeout=5)
+                partial_stdout = raw[:CONTAINER_MAX_OUTPUT_SIZE].decode(errors="replace")
+            if process.stderr:
+                raw = await asyncio.wait_for(process.stderr.read(), timeout=5)
+                partial_stderr = raw[:CONTAINER_MAX_OUTPUT_SIZE].decode(errors="replace")
+        except Exception:
+            pass  # Best-effort, don't let this block the timeout handling
+        # Write a timeout log file with partial output
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        timestamp_str = datetime.now(timezone.utc).isoformat().replace(":", "-").replace(".", "-")
+        timeout_log = logs_dir / f"container-{timestamp_str}.log"
+        log_parts = [
+            "=== Container Run Log (TIMEOUT) ===",
+            f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
+            f"Group: {group.name}",
+            f"Container: {container_name}",
+            f"IsMain: {input_data.is_main}",
+            f"Duration: {duration_ms}ms",
+            f"Timeout: {timeout}ms",
+            "",
+            "=== Stderr ===",
+            partial_stderr or "(empty)",
+            "",
+            "=== Stdout ===",
+            partial_stdout or "(empty)",
+        ]
+        timeout_log.write_text("\n".join(log_parts), encoding="utf-8")
+        logger.debug("Timeout log written: {}", timeout_log)
         return ContainerOutput(
             status="error",
             result=None,
