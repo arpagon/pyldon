@@ -82,6 +82,8 @@ class RegisteredGroup(BaseModel):
     container_config: ContainerConfig | None = None
     save_audio: bool = False
     """If true, save raw audio files to the group workspace audio/ directory."""
+    save_files: bool = False
+    """If true, save file attachments (m.file) to the group workspace files/ directory."""
     always_process_audio: bool = False
     """If true, always process audio messages without requiring a mention.
 

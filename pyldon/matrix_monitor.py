@@ -17,15 +17,17 @@ from nio import (
     InviteMemberEvent,
     MegolmEvent,
     RoomEncryptedAudio,
+    RoomEncryptedFile,
     RoomEncryptedImage,
     RoomMemberEvent,
     RoomMessageAudio,
+    RoomMessageFile,
     RoomMessageImage,
     RoomMessageText,
 )
 
 from pyldon.config import ASSISTANT_NAME, TRIGGER_PATTERN
-from pyldon.matrix_client import get_matrix_client, get_matrix_config
+from pyldon.matrix_client import buffer_megolm_event, get_matrix_client, get_matrix_config
 from pyldon.models import MatrixMessage, MatrixRoomConfig
 from pyldon.pairing import is_main_room, is_paired
 
@@ -233,14 +235,15 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
             logger.error("Failed to join room {}: {}", room.room_id, e)
 
     async def _on_megolm_event(room: Any, event: MegolmEvent) -> None:
-        """Handle undecryptable encrypted messages."""
+        """Handle undecryptable encrypted messages — buffer for retry."""
         logger.warning(
-            "Undecryptable message: room={}, sender={}, device_id={}, session_id={}",
+            "Undecryptable message (buffered for retry): room={}, sender={}, device_id={}, session_id={}",
             room.room_id,
             event.sender,
             event.device_id,
             event.session_id,
         )
+        buffer_megolm_event(room, event)
 
     async def _on_audio_message(room: Any, event: RoomMessageAudio) -> None:
         """Handle incoming audio/voice messages — transcribe and route as text."""
@@ -512,12 +515,166 @@ def start_matrix_monitor(on_message: MessageHandler) -> None:
         except Exception as e:
             logger.error("Error handling image message: room={}, error={}", room_id, e)
 
+    async def _on_file_message(room: Any, event: RoomMessageFile) -> None:
+        """Handle incoming file attachments (m.file) — download, save, and route.
+
+        For audio files (.ogg, .opus, .mp3, .wav, .m4a), also attempts STT transcription
+        so voice messages sent as files (e.g. WhatsApp forwards) are treated like audio.
+        """
+        room_id = room.room_id
+        logger.debug("Received file message: room={}, sender={}, body={}", room_id, event.sender, event.body)
+
+        if event.sender == config.user_id:
+            return
+
+        # Get room config
+        room_config = None
+        if config.rooms and room_id in config.rooms:
+            room_config = config.rooms[room_id]
+            if room_config.enabled is False:
+                return
+
+        is_main = is_paired() and is_main_room(room_id)
+
+        # DM check
+        is_dm = False
+        try:
+            is_dm = room.member_count <= 2
+        except Exception:
+            pass
+
+        if not is_dm:
+            from pyldon.main import _get_group_for_room
+            group_info = _get_group_for_room(room_id)
+            skip_mention = group_info and (
+                group_info.observe_all_messages or group_info.always_process_audio
+            )
+
+            if not skip_mention:
+                require_mention = (
+                    room_config.require_mention
+                    if room_config and room_config.require_mention is not None
+                    else config.require_mention if not is_main else False
+                )
+                if require_mention:
+                    logger.debug("File in group chat requires mention, skipping: room={}", room_id)
+                    return
+
+        # Download file from Matrix (handles encrypted + unencrypted)
+        file_data = await _download_media(client, event)
+        if not file_data:
+            logger.error("Failed to download file: room={}", room_id)
+            return
+
+        filename = event.body or "attachment"
+        # Determine mime type from event source
+        mime_type = "application/octet-stream"
+        if isinstance(event.source, dict):
+            info = event.source.get("content", {}).get("info", {})
+            if info.get("mimetype"):
+                mime_type = info["mimetype"]
+
+        file_ext = Path(filename).suffix.lower()
+        file_size = len(file_data)
+
+        # Check if this is an audio file sent as m.file (common with WhatsApp forwards)
+        audio_extensions = {".ogg", ".opus", ".mp3", ".wav", ".m4a", ".flac", ".weba"}
+        audio_mimes = {"audio/ogg", "audio/opus", "audio/mpeg", "audio/wav", "audio/mp4", "audio/flac",
+                       "audio/x-wav", "application/ogg", "audio/webm"}
+        is_audio = file_ext in audio_extensions or mime_type in audio_mimes
+
+        # Save file to group workspace
+        from pyldon.config import GROUPS_DIR
+        from pyldon.main import _get_group_for_room
+        group_reg = _get_group_for_room(room_id)
+        group_folder = group_reg.folder if group_reg else (room_config.folder if room_config else "unknown")
+
+        # Sanitize event_id for filename
+        safe_id = event.event_id.replace("$", "").replace(":", "_").replace("/", "_")
+        ext = file_ext or ""
+        saved_filename = f"{safe_id}{ext}"
+
+        # Audio files go to audio/, others to files/
+        if is_audio:
+            save_dir = GROUPS_DIR / group_folder / "audio"
+        else:
+            save_dir = GROUPS_DIR / group_folder / "files"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / saved_filename
+        save_path.write_bytes(file_data)
+
+        container_subdir = "audio" if is_audio else "files"
+        container_path = f"/workspace/group/{container_subdir}/{saved_filename}"
+
+        logger.info(
+            "File saved: room={}, sender={}, filename={}, size={}KB, is_audio={}, path={}",
+            room_id, event.sender, filename, file_size // 1024, is_audio, save_path,
+        )
+
+        # For audio files, attempt STT transcription
+        transcription = None
+        if is_audio:
+            from pyldon.config import STT_ENABLED
+            if STT_ENABLED:
+                try:
+                    from pyldon.stt import transcribe_audio
+                    transcription = await transcribe_audio(file_data, filename)
+                    if transcription:
+                        logger.info("File audio transcribed: room={}, text={}", room_id, transcription[:80])
+                except Exception as e:
+                    logger.warning("File audio transcription failed: room={}, error={}", room_id, e)
+
+        # Build message content
+        if is_audio and transcription:
+            text_content = f"[🎤 Voz (audio:{saved_filename})]: {transcription}"
+        elif is_audio:
+            text_content = f"[📎 Audio (audio:{saved_filename})]: {filename} ({file_size // 1024}KB)"
+        else:
+            text_content = f"[📎 Archivo (file:{saved_filename})]: {filename} ({file_size // 1024}KB, {mime_type})"
+
+        sender_name = event.sender
+        try:
+            member = room.users.get(event.sender)
+            if member and member.display_name:
+                sender_name = member.display_name
+        except Exception:
+            pass
+
+        thread_id = None
+        if isinstance(event.source, dict):
+            content = event.source.get("content", {})
+            rel = content.get("m.relates_to", {})
+            if rel.get("rel_type") == "m.thread":
+                thread_id = rel.get("event_id")
+
+        from datetime import datetime, timezone
+
+        ts = getattr(event, "server_timestamp", None) or 0
+        timestamp = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).isoformat()
+
+        message = MatrixMessage(
+            room_id=room_id,
+            event_id=event.event_id,
+            sender=event.sender,
+            sender_name=sender_name,
+            content=text_content,
+            timestamp=timestamp,
+            thread_id=thread_id,
+        )
+
+        try:
+            await on_message(message, room_config, is_main)
+        except Exception as e:
+            logger.error("Error handling file message: room={}, error={}", room_id, e)
+
     # Register callbacks  # type: ignore[arg-type]  # matrix-nio callback types are more specific than the base signature
     client.add_event_callback(_on_room_message, RoomMessageText)  # type: ignore[arg-type]
     client.add_event_callback(_on_image_message, RoomMessageImage)  # type: ignore[arg-type]
     client.add_event_callback(_on_image_message, RoomEncryptedImage)  # type: ignore[arg-type]
     client.add_event_callback(_on_audio_message, RoomMessageAudio)  # type: ignore[arg-type]
     client.add_event_callback(_on_audio_message, RoomEncryptedAudio)  # type: ignore[arg-type]
+    client.add_event_callback(_on_file_message, RoomMessageFile)  # type: ignore[arg-type]
+    client.add_event_callback(_on_file_message, RoomEncryptedFile)  # type: ignore[arg-type]
     client.add_event_callback(_on_invite, InviteMemberEvent)  # type: ignore[arg-type]
     client.add_event_callback(_on_megolm_event, MegolmEvent)  # type: ignore[arg-type]
 
