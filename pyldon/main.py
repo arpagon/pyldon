@@ -60,7 +60,10 @@ from pyldon.db import (
 from pyldon.matrix_client import (
     get_matrix_client,
     get_matrix_config,
+    import_megolm_keys,
     init_matrix_client,
+    register_verification_callbacks,
+    run_e2ee_maintenance,
     send_matrix_audio,
     send_matrix_image,
     send_matrix_message,
@@ -901,29 +904,14 @@ async def _connect_matrix() -> None:
         logger.info("E2EE: performing initial sync to get device lists...")
         resp = await client.sync(timeout=30000, full_state=True)
 
-        # Upload device keys if needed
-        if client.should_upload_keys:
-            logger.info("E2EE: uploading device keys...")
-            await client.keys_upload()
+        # Import previously exported Megolm keys (survives restarts)
+        await import_megolm_keys()
 
-        # Query keys for all users we share rooms with
-        if client.should_query_keys:
-            logger.info("E2EE: querying device keys for room members...")
-            await client.keys_query()
+        # Run full E2EE maintenance (upload/query/claim keys, auto-trust, retry)
+        await run_e2ee_maintenance()
 
-        # Auto-trust all devices of all users in our rooms (bot behavior)
-        logger.info("E2EE: auto-trusting all devices in joined rooms...")
-        for room_id, room in client.rooms.items():
-            for user_id in room.users:
-                devices = client.device_store.active_user_devices(user_id)
-                for device in devices:
-                    if client.olm and not client.olm.is_device_verified(device):
-                        logger.debug(
-                            "E2EE: trusting device {} of user {}",
-                            device.device_id,
-                            user_id,
-                        )
-                        client.verify_device(device)
+        # Register SAS verification handlers (for "Verify session" from Element)
+        register_verification_callbacks()
 
         logger.info("E2EE: device trust setup complete")
 
@@ -943,9 +931,27 @@ async def _connect_matrix() -> None:
     # Start all background tasks
     asyncio.create_task(start_scheduler_loop(scheduler_deps))
     asyncio.create_task(_start_ipc_watcher())
+    if config.encryption:
+        asyncio.create_task(_e2ee_maintenance_loop())
 
     # Start the matrix-nio sync loop (this blocks)
     await client.sync_forever(timeout=30000, full_state=True)
+
+
+async def _e2ee_maintenance_loop() -> None:
+    """Periodically run E2EE maintenance (key mgmt, auto-trust, retry decryptions).
+
+    sync_forever() handles basic sync but doesn't drive all key management
+    tasks needed for reliable E2EE in a bot context.
+    """
+    while True:
+        try:
+            await asyncio.sleep(60)  # Run every 60 seconds
+            await run_e2ee_maintenance()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            logger.warning("E2EE maintenance loop error: {}", exc)
 
 
 async def _async_main() -> None:
@@ -957,12 +963,43 @@ async def _async_main() -> None:
 
     _load_state()
 
+    # Register signal handlers for graceful shutdown (export keys, etc.)
+    import signal
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_shutdown(s)))
+
     logger.info("Pyldon running on Matrix (trigger: @{})", ASSISTANT_NAME)
     try:
         await _connect_matrix()
+    except asyncio.CancelledError:
+        logger.info("Pyldon shutting down (cancelled)")
     finally:
-        await stop_matrix_client()
-        await close_database()
+        if not _shutting_down:
+            await stop_matrix_client()
+            await close_database()
+
+
+_shutting_down = False
+
+
+async def _shutdown(sig: int) -> None:
+    """Graceful shutdown: export keys, cancel tasks."""
+    global _shutting_down
+    if _shutting_down:
+        return
+    _shutting_down = True
+
+    import signal as sig_mod
+
+    logger.info("Received signal {}, shutting down gracefully...", sig_mod.Signals(sig).name)
+    await stop_matrix_client()
+    await close_database()
+    # Cancel all running tasks to unblock sync_forever and other loops
+    for task in asyncio.all_tasks():
+        if task is not asyncio.current_task():
+            task.cancel()
 
 
 def main_entry() -> None:
