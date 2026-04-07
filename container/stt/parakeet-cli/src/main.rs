@@ -32,7 +32,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = parakeet.transcribe_file(audio_path, Some(TimestampMode::Sentences))?;
 
     let total_time = start.elapsed().as_secs_f32();
-    eprintln!("[stt] Done in {:.1}s: {}...", total_time, &result.text[..result.text.len().min(80)]);
+    let preview: &str = match result.text.char_indices().nth(80) {
+        Some((idx, _)) => &result.text[..idx],
+        None => &result.text,
+    };
+    eprintln!("[stt] Done in {:.1}s: {}...", total_time, preview);
 
     let output = Output {
         text: result.text,
