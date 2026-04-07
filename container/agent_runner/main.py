@@ -69,7 +69,7 @@ async def run(input_data: dict) -> dict:
         )
 
     # Build pi command
-    cmd = [PI_BINARY, "--mode", "rpc", "--no-session", "-e", PI_EXTENSION]
+    cmd = [PI_BINARY, "--mode", "rpc", "-e", PI_EXTENSION]
     # Add extra extensions (comma-separated)
     if PI_EXTRA_EXTENSIONS:
         for ext in PI_EXTRA_EXTENSIONS.split(","):
