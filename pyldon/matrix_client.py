@@ -95,18 +95,23 @@ async def _room_send_with_trust(room_id: str, content: dict[str, Any]) -> Any:
 
     if not isinstance(resp, RoomSendResponse):
         error_str = str(resp)
-        if "not verified" in error_str or "blacklisted" in error_str:
-            logger.warning("E2EE: unverified device in {}, trusting and retrying...", room_id)
+        if "not verified" in error_str or "blacklisted" in error_str or "Missing session" in error_str:
+            logger.warning("E2EE: send failed in {} ({}), running key maintenance and retrying...", room_id, error_str[:120])
             try:
                 await client.keys_query()
-            except Exception:
-                pass
-            if await _trust_unknown_devices_in_room(room_id):
-                resp = await client.room_send(
-                    room_id=room_id,
-                    message_type="m.room.message",
-                    content=content,
-                )
+                # Claim one-time keys for devices we don't have Olm sessions with
+                users = client.get_users_for_key_claiming()
+                if users:
+                    await client.keys_claim(users)
+                await client.send_to_device_messages()
+            except Exception as e:
+                logger.debug("E2EE: key maintenance error during retry: {}", e)
+            await _trust_unknown_devices_in_room(room_id)
+            resp = await client.room_send(
+                room_id=room_id,
+                message_type="m.room.message",
+                content=content,
+            )
 
     return resp
 

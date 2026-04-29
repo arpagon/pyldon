@@ -231,17 +231,30 @@ def _build_volume_mounts(group: RegisteredGroup, is_main: bool) -> list[VolumeMo
     return mounts
 
 
-def _build_docker_args(mounts: list[VolumeMount], container_name: str) -> list[str]:
+def _build_docker_args(
+    mounts: list[VolumeMount],
+    container_name: str,
+    group: RegisteredGroup | None = None,
+) -> list[str]:
     """Build docker run arguments from mounts."""
     args = ["run", "-i", "--rm", "--name", container_name]
 
-    # Load environment variables from env file and pass via -e
+    # Load environment variables from global env file and pass via -e
     env_file = DATA_DIR / "env" / "env"
     if env_file.exists():
         for line in env_file.read_text(encoding="utf-8").strip().splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 args.extend(["-e", line])
+
+    # Load per-group .env (all variables allowed)
+    if group is not None:
+        group_env_file = GROUPS_DIR / group.folder / ".env"
+        if group_env_file.exists():
+            for line in group_env_file.read_text(encoding="utf-8").strip().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    args.extend(["-e", line])
 
     for mount in mounts:
         if mount.readonly:
@@ -269,7 +282,7 @@ async def run_container_agent(
 
     mounts = _build_volume_mounts(group, input_data.is_main)
     container_name = f"pyldon-{group.folder}-{uuid.uuid4().hex[:8]}"
-    docker_args = _build_docker_args(mounts, container_name)
+    docker_args = _build_docker_args(mounts, container_name, group)
 
     logger.debug(
         "Container mount config: group={}, mounts={}",
