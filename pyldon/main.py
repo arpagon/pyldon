@@ -401,14 +401,6 @@ async def _process_matrix_message(
     response = await _run_agent(group, prompt, message.room_id, images=message.images, timeout_override=timeout_override)
     await set_matrix_typing(message.room_id, False)
 
-    # Agent already sent response via IPC — don't send again
-    if getattr(_run_agent, '_used_ipc_send', False):
-        _run_agent._used_ipc_send = False
-        logger.debug("Agent responded via IPC, skipping direct send: group={}", group.name)
-        _last_agent_timestamp[message.room_id] = message.timestamp
-        _save_state()
-        return
-
     if not response:
         # Notify user about the failure instead of silently dropping
         error_detail = getattr(_run_agent, '_last_error', None) or "unknown error"
@@ -504,9 +496,6 @@ async def _run_agent(
             logger.error("Container agent error: group={}, error={}", group.name, output.error)
             _run_agent._last_error = output.error
             return None
-
-        # Track whether agent sent response via IPC
-        _run_agent._used_ipc_send = output.used_ipc_send
 
         return output.result
     except Exception as e:
