@@ -500,9 +500,13 @@ async def run_container_agent(
             existing = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
             log_file.write_text(existing + "\n=== Pi Stderr ===\n" + agent_stderr + "\n", encoding="utf-8")
 
+        # Flag if agent already sent response via IPC
+        if any(tc.get("tool") == "pyldon_send_message" for tc in agent_tool_calls):
+            output.used_ipc_send = True
+
         logger.info(
-            "Container completed: group={}, duration={}ms, status={}, has_result={}, tools={}",
-            group.name, duration_ms, output.status, bool(output.result), len(agent_tool_calls),
+            "Container completed: group={}, duration={}ms, status={}, has_result={}, tools={}, ipc_send={}",
+            group.name, duration_ms, output.status, bool(output.result), len(agent_tool_calls), output.used_ipc_send,
         )
         return output
 

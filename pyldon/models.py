@@ -221,6 +221,7 @@ class ContainerOutput(BaseModel):
     result: str | None = None
     new_session_id: str | None = None
     error: str | None = None
+    used_ipc_send: bool = False
 
 
 # --- IPC Models ---

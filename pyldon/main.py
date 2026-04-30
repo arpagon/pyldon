@@ -402,6 +402,11 @@ async def _process_matrix_message(
     await set_matrix_typing(message.room_id, False)
 
     if not response:
+        # Agent already sent response via IPC — not an error
+        if getattr(_run_agent, '_used_ipc_send', False):
+            _run_agent._used_ipc_send = False
+            logger.debug("Agent responded via IPC, no direct result: group={}", group.name)
+            return
         # Notify user about the failure instead of silently dropping
         error_detail = getattr(_run_agent, '_last_error', None) or "unknown error"
         await send_matrix_message(
@@ -497,6 +502,12 @@ async def _run_agent(
             _run_agent._last_error = output.error
             return None
 
+        # Agent responded via IPC (pyldon_send_message) — no direct result needed
+        if not output.result and output.used_ipc_send:
+            _run_agent._used_ipc_send = True
+            return None
+
+        _run_agent._used_ipc_send = False
         return output.result
     except Exception as e:
         logger.error("Agent error: group={}, error={}", group.name, e)
