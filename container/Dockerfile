@@ -1,8 +1,8 @@
 # Pyldon Agent Container
 # Runs pi.dev agent in isolated container with browser automation
 
-FROM ghcr.io/astral-sh/uv:latest AS uv
-FROM python:3.12-slim
+FROM ghcr.io/astral-sh/uv:0.11.8 AS uv
+FROM python:3.14.4-slim
 
 # uv package manager
 COPY --from=uv /uv /uvx /usr/local/bin/
